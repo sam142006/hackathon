@@ -602,10 +602,7 @@ const RecruiterDashboard = () => {
                   Here's your hiring snapshot for today. You're doing great! 
                 </p>
               </div>
-              <div className="bg-white/20 backdrop-blur rounded-xl px-4 py-2 text-center">
-                <p className="text-xs text-teal-100">Today's Activity</p>
-                <p className="text-xl font-bold">+12 New</p>
-              </div>
+              
             </div>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -672,17 +669,10 @@ const RecruiterDashboard = () => {
             
             <div className="mt-4 bg-white/20 backdrop-blur rounded-xl p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="bg-yellow-300/30 p-2 rounded-full">
-                  <FaStar className="text-yellow-300" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Pro Tip</p>
-                  <p className="text-xs text-teal-100">You have {stats.totalApplicants} applicants waiting for review. Check them now!</p>
-                </div>
+                
+                
               </div>
-              <button onClick={handleViewAllApplicants} className="px-4 py-2 bg-white text-teal-600 rounded-lg text-sm font-semibold hover:bg-teal-50 transition">
-                Review Now →
-              </button>
+              
             </div>
           </div>
         </div>
@@ -769,9 +759,7 @@ const RecruiterDashboard = () => {
           <button onClick={handleViewAllApplicants} className="bg-white rounded-xl p-4 border-2 border-teal-500 text-teal-600 flex items-center justify-center gap-2 hover:bg-teal-50 transition-all font-semibold">
             <FaUsers /> View All Applicants ({allApplicants.length})
           </button>
-          <button className="bg-white rounded-xl p-4 border-2 border-gray-300 text-gray-600 flex items-center justify-center gap-2 hover:bg-gray-50 transition-all font-semibold">
-            <FaDownload /> Download Report
-          </button>
+          
         </div>
 
         
