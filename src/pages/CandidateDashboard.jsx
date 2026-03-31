@@ -3,16 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   FaBriefcase, 
   FaSignOutAlt,
-  FaSearch,
-  FaMapMarkerAlt,
-  FaBuilding,
-  FaEye,
-  FaCheckCircle,
-  FaClock,
-  FaBookmark,
-  FaCalendarAlt,
-  FaUpload,
-  FaFileAlt,
+  
   FaStar,
   FaHeart,
   FaLinkedin,
