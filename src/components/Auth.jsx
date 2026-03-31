@@ -5,28 +5,35 @@ import { FaUser, FaEnvelope, FaLock, FaBriefcase, FaGraduationCap } from 'react-
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState('candidate');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   
   const [signupName, setSignupName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
+  
+ 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
   const handleLoginClick = () => {
     setIsLogin(false);
+    setError('');
   };
 
   const handleSignupClick = () => {
     setIsLogin(true);
+    setError('');
   };
 
+ 
   const handleSignupSubmit = (e) => {
     e.preventDefault();
     console.log('Signup submitted with role:', role);
     
-   
+  
     localStorage.setItem('userRole', role);
     localStorage.setItem('userName', signupName);
     localStorage.setItem('userEmail', signupEmail);
@@ -37,7 +44,7 @@ const Auth = () => {
       userEmail: localStorage.getItem('userEmail')
     });
     
-    
+  
     if (role === 'recruiter') {
       console.log('Navigating to /recruiter');
       navigate('/recruiter');
@@ -47,26 +54,57 @@ const Auth = () => {
     }
   };
 
-  const handleLoginSubmit = (e) => {
+ 
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    console.log('Login submitted');
+    setLoading(true);
+    setError('');
     
-    
-    const storedRole = localStorage.getItem('userRole');
-    console.log('Stored role from localStorage:', storedRole);
-    
-    const finalRole = storedRole || role;
-    localStorage.setItem('userRole', finalRole);
-    
-    console.log('Final role for navigation:', finalRole);
-    
-  
-    if (finalRole === 'recruiter') {
-      console.log('Navigating to /recruiter');
-      navigate('/recruiter');
-    } else {
-      console.log('Navigating to /candidate');
-      navigate('/candidate');
+    try {
+      const response = await fetch('http://localhost:8082/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: loginEmail,
+          password: loginPassword
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+      
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('userId', data.userId);
+      localStorage.setItem('userRole', data.role);
+      localStorage.setItem('userName', data.name);
+      localStorage.setItem('userEmail', data.email);
+      
+      console.log('Login successful:', data);
+      console.log('Stored in localStorage:', {
+        token: localStorage.getItem('token'),
+        userRole: localStorage.getItem('userRole'),
+        userName: localStorage.getItem('userName'),
+        userEmail: localStorage.getItem('userEmail')
+      });
+      
+      if (data.role === 'RECRUITER') {
+        console.log('Navigating to /recruiter');
+        navigate('/recruiter');
+      } else {
+        console.log('Navigating to /candidate');
+        navigate('/candidate');
+      }
+      
+    } catch (err) {
+      setError(err.message || 'Login failed. Please check your credentials.');
+      console.error('Login error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -74,16 +112,26 @@ const Auth = () => {
     <div className="h-screen bg-gradient-to-br from-teal-50 to-green-50 flex items-center justify-center p-8">
       <div className="relative w-full max-w-4xl h-[550px] bg-white rounded-2xl shadow-2xl overflow-hidden">
         
-     
+        {error && (
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
+            {error}
+            <button 
+              onClick={() => setError('')}
+              className="ml-3 text-white hover:text-gray-200"
+            >
+              ×
+            </button>
+          </div>
+        )}
+        
         <div className={`absolute top-0 w-1/2 h-full transition-all duration-500 ease-in-out ${
           isLogin ? 'left-0' : '-left-1/2'
         }`}>
           <div className="w-full h-full bg-white px-8 py-6 flex flex-col justify-center">
             <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Create Account</h2>
             
-           
+         
             <div className="mb-4">
-            
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -171,6 +219,7 @@ const Auth = () => {
                   onChange={(e) => setLoginEmail(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 rounded-full border border-gray-300 focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition-all text-sm"
                   required
+                  disabled={loading}
                 />
               </div>
               <div className="relative">
@@ -182,6 +231,7 @@ const Auth = () => {
                   onChange={(e) => setLoginPassword(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 rounded-full border border-gray-300 focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none transition-all text-sm"
                   required
+                  disabled={loading}
                 />
               </div>
               <div className="text-right">
@@ -191,15 +241,16 @@ const Auth = () => {
               </div>
               <button
                 type="submit"
-                className="w-full py-2 px-4 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-full font-semibold hover:from-teal-600 hover:to-green-600 transition-all duration-300 transform hover:scale-105 shadow-md text-sm"
+                disabled={loading}
+                className="w-full py-2 px-4 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-full font-semibold hover:from-teal-600 hover:to-green-600 transition-all duration-300 transform hover:scale-105 shadow-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                LOG IN
+                {loading ? 'LOGGING IN...' : 'LOG IN'}
               </button>
             </form>
           </div>
         </div>
 
-       
+        
         <div className={`absolute top-0 w-1/2 h-full bg-gradient-to-br from-teal-600 to-green-700 text-white transition-all duration-500 ease-in-out z-10 ${
           isLogin ? 'left-1/2' : 'left-0'
         }`}>

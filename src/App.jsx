@@ -12,11 +12,11 @@ function App() {
       <Route path="/" element={<Auth />} />
       <Route 
         path="/recruiter" 
-        element={userRole === 'recruiter' ? <RecruiterDashboard /> : <Navigate to="/" />} 
+        element={userRole === 'RECRUITER' ? <RecruiterDashboard /> : <Navigate to="/" />} 
       />
       <Route 
         path="/candidate" 
-        element={userRole === 'candidate' ? <CandidateDashboard /> : <Navigate to="/" />} 
+        element={userRole === 'CANDIDATE' ? <CandidateDashboard /> : <Navigate to="/" />} 
       />
     </Routes>
   );
