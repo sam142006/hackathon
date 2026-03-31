@@ -83,7 +83,7 @@ const Auth = () => {
             
            
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">I am a:</label>
+            
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -193,7 +193,7 @@ const Auth = () => {
                 type="submit"
                 className="w-full py-2 px-4 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-full font-semibold hover:from-teal-600 hover:to-green-600 transition-all duration-300 transform hover:scale-105 shadow-md text-sm"
               >
-                SIGN IN
+                LOG IN
               </button>
             </form>
           </div>
