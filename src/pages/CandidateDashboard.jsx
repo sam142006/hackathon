@@ -42,6 +42,8 @@ import {
   FaLanguage,
   FaTools
 } from 'react-icons/fa';
+import CandidateResumePanel from '../components/CandidateResumePanel';
+import { clearSession } from '../utils/auth';
 
 const CandidateDashboard = () => {
   const navigate = useNavigate();
@@ -145,9 +147,7 @@ const CandidateDashboard = () => {
   );
 
   const handleLogout = () => {
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userName');
-    localStorage.removeItem('userEmail');
+    clearSession();
     navigate('/');
   };
 
@@ -252,6 +252,12 @@ const CandidateDashboard = () => {
               </button>
               <button className="px-6 py-2 bg-white/20 backdrop-blur rounded-xl font-semibold hover:bg-white/30 transition flex items-center gap-2">
                 <FaChartLine /> Career Path
+              </button>
+              <button
+                onClick={() => navigate('/mock-interview')}
+                className="px-6 py-2 bg-white/20 backdrop-blur rounded-xl font-semibold hover:bg-white/30 transition flex items-center gap-2"
+              >
+                <FaFileAlt /> Start Mock Interview
               </button>
             </div>
           </div>
@@ -368,6 +374,8 @@ const CandidateDashboard = () => {
             </div>
           </div>
         </div>
+
+        <CandidateResumePanel />
 
        
         <div className="bg-gradient-to-r from-teal-50 to-green-50 rounded-3xl p-6 mb-8">

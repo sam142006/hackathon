@@ -38,6 +38,7 @@ import {
   FaBell,
   FaMoneyBillWave
 } from 'react-icons/fa';
+import { clearSession } from '../utils/auth';
 
 const RecruiterDashboard = () => {
   const navigate = useNavigate();
@@ -221,9 +222,7 @@ const RecruiterDashboard = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userName');
-    localStorage.removeItem('userEmail');
+    clearSession();
     navigate('/');
   };
 

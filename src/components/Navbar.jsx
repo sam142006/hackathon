@@ -1,15 +1,14 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaUserCircle, FaSignOutAlt } from 'react-icons/fa';
+import { clearSession } from '../utils/auth';
 
 const Navbar = ({ title }) => {
   const navigate = useNavigate();
   const userName = localStorage.getItem('userName') || 'User';
 
   const handleLogout = () => {
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userName');
-    localStorage.removeItem('userEmail');
+    clearSession();
     navigate('/');
   };
 

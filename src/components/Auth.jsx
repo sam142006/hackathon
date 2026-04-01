@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaUser, FaEnvelope, FaLock, FaBriefcase, FaGraduationCap, FaArrowLeft, FaSpinner } from 'react-icons/fa';
+import { API_BASE_URL } from '../utils/api';
+import { getDefaultRouteForRole, getStoredToken, resolveSession } from '../utils/auth';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -30,6 +32,30 @@ const Auth = () => {
     return () => clearInterval(interval);
   }, [resendTimer]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const restoreSession = async () => {
+      const token = getStoredToken();
+
+      if (!token) {
+        return;
+      }
+
+      const session = await resolveSession(token);
+
+      if (session && isMounted) {
+        navigate(getDefaultRouteForRole(session.role), { replace: true });
+      }
+    };
+
+    restoreSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [navigate]);
+
   const handleLoginClick = () => {
     setIsLogin(false);
     setError('');
@@ -48,7 +74,7 @@ const handleSignupSubmit = async (e) => {
   setError('');
   
   try {
-    const response = await fetch('https://smarthire-hack.onrender.com/api/auth/signup', {
+    const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -127,7 +153,7 @@ try {
     setError('');
     
     try {
-      const response = await fetch('https://smarthire-hack.onrender.com/api/auth/verify-otp', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -158,7 +184,7 @@ try {
      
       setTimeout(async () => {
         try {
-          const loginResponse = await fetch('https://smarthire-hack.onrender.com/api/auth/login', {
+          const loginResponse = await fetch(`${API_BASE_URL}/api/auth/login`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -175,19 +201,13 @@ try {
             throw new Error(loginData.message || 'Auto-login failed');
           }
           
-         
-          localStorage.setItem('token', loginData.token);
-          localStorage.setItem('userId', loginData.userId);
-          localStorage.setItem('userRole', loginData.role);
-          localStorage.setItem('userName', loginData.name);
-          localStorage.setItem('userEmail', loginData.email);
-          
-         
-          if (loginData.role === 'RECRUITER') {
-            navigate('/recruiter');
-          } else {
-            navigate('/candidate');
+          const session = await resolveSession(loginData.token, loginData);
+
+          if (!session) {
+            throw new Error('Unable to resolve authenticated user session');
           }
+
+          navigate(getDefaultRouteForRole(session.role), { replace: true });
           
         } catch (err) {
           setError('Auto-login failed. Please login manually.');
@@ -216,7 +236,7 @@ try {
     setError('');
     
     try {
-      const response = await fetch('https://smarthire-hack.onrender.com/api/auth/signup', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -263,7 +283,7 @@ const handleLoginSubmit = async (e) => {
   setError('');
   
   try {
-    const response = await fetch('https://smarthire-hack.onrender.com/api/auth/login', {
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -290,27 +310,13 @@ try {
     console.log('Login successful:', data);
     console.log('Role from API:', data.role);
     
-   
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('userId', data.userId);
-    localStorage.setItem('userRole', data.role);
-    localStorage.setItem('userName', data.name);
-    localStorage.setItem('userEmail', data.email);
-    
-   
-    console.log('Stored userRole:', localStorage.getItem('userRole'));
-    
-   
-    if (data.role === 'RECRUITER') {
-      console.log('Navigating to /recruiter');
-      navigate('/recruiter');
-    } else if (data.role === 'CANDIDATE') {
-      console.log('Navigating to /candidate');
-      navigate('/candidate');
-    } else {
-      console.log('Unknown role, defaulting to candidate');
-      navigate('/candidate');
+    const session = await resolveSession(data.token, data);
+
+    if (!session) {
+      throw new Error('Unable to resolve authenticated user session');
     }
+
+    navigate(getDefaultRouteForRole(session.role), { replace: true });
     
   } catch (err) {
     setError(err.message || 'Login failed. Please check your credentials.');
