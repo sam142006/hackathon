@@ -30,8 +30,3 @@ export const getInterviewCompletionStatus = (token) =>
     token,
   });
 
-export const endInterviewSession = (token) =>
-  apiRequest('/api/interview/end-session', {
-    method: 'POST',
-    token,
-  });
