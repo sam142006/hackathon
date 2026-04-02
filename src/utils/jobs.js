@@ -30,6 +30,20 @@ export const mapJobFromApi = (job) => ({
   applied: Boolean(job.applied),
 });
 
+export const mapApplicationFromApi = (application) => ({
+  id: application.id ?? application.applicationId ?? crypto.randomUUID(),
+  candidateName:
+    application.candidateName ??
+    application.name ??
+    application.candidate?.name ??
+    'Candidate',
+  email: application.email ?? application.candidateEmail ?? application.candidate?.email ?? 'N/A',
+  skills: normalizeSkills(application.skills ?? application.candidateSkills ?? application.candidate?.skills),
+  coverLetter: application.coverLetter ?? application.message ?? 'No cover letter provided.',
+  status: application.status ?? 'PENDING',
+  appliedDate: application.appliedDate ?? application.createdAt ?? '',
+});
+
 export const getCandidateJobs = (token) =>
   apiRequest('/api/candidate/jobs', {
     method: 'GET',
@@ -60,4 +74,30 @@ export const getRecruiterJobs = (token) =>
   apiRequest('/api/recruiter/jobs', {
     method: 'GET',
     token,
+  });
+
+export const getJobApplications = (token, jobId) =>
+  apiRequest(`/api/recruiter/jobs/${jobId}/applications`, {
+    method: 'GET',
+    token,
+  });
+
+export const updateApplicationStatus = (token, applicationId, payload) =>
+  apiRequest(`/api/recruiter/applications/${applicationId}/status`, {
+    method: 'PUT',
+    token,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+export const toggleRecruiterJobStatus = (token, jobId, payload) =>
+  apiRequest(`/api/recruiter/jobs/${jobId}/status`, {
+    method: 'PUT',
+    token,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
   });
