@@ -1,27 +1,37 @@
 import { apiRequest } from './api';
 
-const RESUME_BASE_PATH = '/api/candidate/profile/resume';
-
 export const uploadResume = (token, file) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('resume', file);
 
-  return apiRequest(RESUME_BASE_PATH, {
+  return apiRequest('/api/candidate/profile/resume', {
     method: 'POST',
     token,
     body: formData,
   });
 };
 
-export const checkResumeExists = (token) =>
-  apiRequest(`${RESUME_BASE_PATH}/exists`, {
+export const checkResumeExists = (token, resumeId) =>
+  apiRequest(`/api/resumes/${resumeId}/exists`, {
+    method: 'GET',
+    token,
+  });
+
+export const downloadResume = (token, resumeId) =>
+  apiRequest(`/api/resumes/${resumeId}/download`, {
     method: 'GET',
     token,
   });
 
 export const getResumeAnalysis = (token) =>
-  apiRequest(`${RESUME_BASE_PATH}/analysis`, {
+  apiRequest('/api/candidate/profile/resume/analysis', {
     method: 'GET',
+    token,
+  });
+
+export const startInterviewSession = (token) =>
+  apiRequest('/api/interview/start-session', {
+    method: 'POST',
     token,
   });
