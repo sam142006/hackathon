@@ -718,8 +718,7 @@ const RecruiterDashboard = () => {
               </div>
               <div className="text-right">
                 <span className="text-3xl font-bold text-gray-800">{stats.totalApplicants}</span>
-                
-                
+                <p className="text-xs text-green-500 mt-1">Total</p>
               </div>
             </div>
             <h3 className="text-gray-600 font-medium">Total Applicants</h3>
