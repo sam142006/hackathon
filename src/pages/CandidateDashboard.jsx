@@ -314,8 +314,8 @@ const CandidateDashboard = () => {
                 {stats.applicationSuccess}
               </span>
             </div>
-            <h3 className="text-gray-800 font-bold text-lg mb-1">Success Rate</h3>
-            <p className="text-gray-500 text-sm">Application to interview</p>
+            
+           
           </div>
         </div>
 
