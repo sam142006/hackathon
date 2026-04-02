@@ -14,6 +14,7 @@ import {
 import { clearSession, getStoredToken } from '../utils/auth';
 import {
   endInterviewSession,
+  getInterviewCompletionStatus,
   getInterviewResult,
   startInterviewSession,
   submitInterviewAnswer,
@@ -43,6 +44,7 @@ const MockInterview = () => {
   const [totalQuestions, setTotalQuestions] = useState(10);
   const [answer, setAnswer] = useState('');
   const [interviewCompleted, setInterviewCompleted] = useState(false);
+  const [isInterviewComplete, setIsInterviewComplete] = useState(false);
   const [resultData, setResultData] = useState(null);
   const [questionAnswers, setQuestionAnswers] = useState([]);
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -89,10 +91,52 @@ const MockInterview = () => {
     setTotalQuestions(10);
     setAnswer('');
     setInterviewCompleted(false);
+    setIsInterviewComplete(false);
     setResultData(null);
     setQuestionAnswers([]);
     setSessionStarted(false);
     setMessage(nextMessage);
+  };
+
+  const checkInterviewCompletion = async ({ withLoader = false } = {}) => {
+    if (withLoader) {
+      setLoading(true);
+      setLoadingAction('status');
+    }
+
+    try {
+      const response = await withAuth((token) => getInterviewCompletionStatus(token));
+
+      if (!response) {
+        return false;
+      }
+
+      const data = await parseResponseBody(response);
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Unable to check interview status.');
+      }
+
+      const complete = Boolean(data.complete);
+      setIsInterviewComplete(complete);
+
+      if (complete) {
+        setInterviewCompleted(true);
+        setCurrentQuestion('');
+        setAnswer('');
+        setMessage('Interview completed. You can now fetch your result.');
+      }
+
+      return complete;
+    } catch (statusError) {
+      setError(statusError.message || 'Unable to check interview status.');
+      return false;
+    } finally {
+      if (withLoader) {
+        setLoading(false);
+        setLoadingAction('');
+      }
+    }
   };
 
   const handleStartInterview = async () => {
@@ -116,6 +160,7 @@ const MockInterview = () => {
 
       setSessionStarted(true);
       setInterviewCompleted(false);
+      setIsInterviewComplete(false);
       setResultData(null);
       setQuestionAnswers([]);
       setCurrentQuestion(data.question || '');
@@ -138,7 +183,21 @@ const MockInterview = () => {
     }
   }, []);
 
+  useEffect(() => {
+    if (location.state?.autoStart) {
+      return;
+    }
+
+    checkInterviewCompletion({ withLoader: true });
+  }, []);
+
   const handleSubmitAnswer = async () => {
+    if (isInterviewComplete) {
+      setInterviewCompleted(true);
+      setMessage('Interview completed. You can now fetch your result.');
+      return;
+    }
+
     if (!answer.trim()) {
       setError('Please write an answer before submitting.');
       return;
@@ -178,6 +237,7 @@ const MockInterview = () => {
 
       if (data.completed) {
         setInterviewCompleted(true);
+        setIsInterviewComplete(true);
         setSessionStarted(true);
         setCurrentQuestion('');
         setAnswer('');
@@ -192,6 +252,7 @@ const MockInterview = () => {
       setTotalQuestions(data.totalQuestions ?? totalQuestions);
       setAnswer('');
       setMessage(`Answer submitted. Moving to question ${data.nextQuestionNumber ?? questionNumber + 1}.`);
+      await checkInterviewCompletion();
     } catch (submitError) {
       setError(submitError.message || 'Unable to submit answer.');
     } finally {
@@ -357,12 +418,12 @@ const MockInterview = () => {
                         Live Session
                       </p>
                       <h2 className="mt-2 text-2xl font-bold text-gray-900">
-                        {interviewCompleted
+                        {interviewCompleted || isInterviewComplete
                           ? 'Interview completed successfully'
                           : `Question ${questionNumber} of ${totalQuestions}`}
                       </h2>
                       <p className="mt-2 text-sm text-gray-500">
-                        {interviewCompleted
+                        {interviewCompleted || isInterviewComplete
                           ? 'Fetch your result to review the full interview analysis.'
                           : 'Read the prompt carefully and write a focused, structured answer.'}
                       </p>
@@ -374,7 +435,7 @@ const MockInterview = () => {
                       </span>
                       <span className="inline-flex items-center gap-2 rounded-full bg-white border border-teal-100 px-3 py-1.5 text-gray-700">
                         <FaBrain className="text-teal-600" />
-                        {interviewCompleted ? 'Ready for result' : 'AI session active'}
+                        {interviewCompleted || isInterviewComplete ? 'Ready for result' : 'AI session active'}
                       </span>
                     </div>
                   </div>
@@ -398,7 +459,7 @@ const MockInterview = () => {
                     </div>
                   )}
 
-                  {!interviewCompleted && (
+                  {!interviewCompleted && !isInterviewComplete && (
                     <div className="mt-5 rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
                       <div className="flex items-start gap-3">
                         <div className="rounded-2xl bg-teal-50 p-3 text-teal-600">
@@ -423,7 +484,7 @@ const MockInterview = () => {
                           rows={9}
                           placeholder="Write your answer here with context, action, and measurable impact..."
                           className="mt-3 w-full border border-gray-200 rounded-2xl bg-white p-4 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none text-gray-700 leading-6"
-                          disabled={loading}
+                          disabled={loading || isInterviewComplete}
                         />
                         <p className="mt-3 text-xs text-gray-500">
                           Tip: keep your answer specific, concise, and outcome-focused.
@@ -438,10 +499,10 @@ const MockInterview = () => {
                     Session Controls
                   </p>
                   <div className="mt-5 space-y-3">
-                    {!interviewCompleted && (
+                    {!interviewCompleted && !isInterviewComplete && (
                       <button
                         onClick={handleSubmitAnswer}
-                        disabled={loading}
+                        disabled={loading || isInterviewComplete}
                         className="w-full px-6 py-3 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-2xl font-semibold hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
                         {loadingAction === 'submit' ? (
@@ -453,7 +514,7 @@ const MockInterview = () => {
                       </button>
                     )}
 
-                    {interviewCompleted && (
+                    {(interviewCompleted || isInterviewComplete) && (
                       <button
                         onClick={handleGetResult}
                         disabled={loading}
@@ -467,6 +528,14 @@ const MockInterview = () => {
                         Get Result
                       </button>
                     )}
+
+                    <div className="w-full rounded-2xl bg-gray-50 border border-gray-100 px-4 py-3 text-sm text-gray-600">
+                      {loadingAction === 'status'
+                        ? 'Checking interview status...'
+                        : interviewCompleted || isInterviewComplete
+                          ? 'Interview completed'
+                          : 'Interview in progress...'}
+                    </div>
 
                     <button
                       onClick={handleEndInterview}
@@ -488,7 +557,9 @@ const MockInterview = () => {
                       <div className="flex items-center justify-between">
                         <span>Current progress</span>
                         <span className="font-semibold text-gray-800">
-                          {interviewCompleted ? `${totalQuestions}/${totalQuestions}` : `${questionNumber}/${totalQuestions}`}
+                          {interviewCompleted || isInterviewComplete
+                            ? `${totalQuestions}/${totalQuestions}`
+                            : `${questionNumber}/${totalQuestions}`}
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
@@ -498,7 +569,7 @@ const MockInterview = () => {
                       <div className="flex items-center justify-between">
                         <span>Status</span>
                         <span className="font-semibold text-gray-800">
-                          {interviewCompleted ? 'Completed' : 'In progress'}
+                          {interviewCompleted || isInterviewComplete ? 'Completed' : 'In progress'}
                         </span>
                       </div>
                     </div>
