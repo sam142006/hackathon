@@ -24,7 +24,11 @@ export const getInterviewResult = (token) =>
     token,
   });
 
-
+export const getInterviewCompletionStatus = (token) =>
+  apiRequest('/api/interview/is-complete', {
+    method: 'GET',
+    token,
+  });
 
 export const endInterviewSession = (token) =>
   apiRequest('/api/interview/end-session', {
