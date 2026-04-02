@@ -29,9 +29,3 @@ export const getResumeAnalysis = (token) =>
     method: 'GET',
     token,
   });
-
-export const startInterviewSession = (token) =>
-  apiRequest('/api/interview/start-session', {
-    method: 'POST',
-    token,
-  });

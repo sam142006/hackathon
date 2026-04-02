@@ -14,7 +14,6 @@ import {
   checkResumeExists,
   downloadResume,
   getResumeAnalysis,
-  startInterviewSession,
   uploadResume,
 } from '../utils/resume';
 
@@ -58,7 +57,6 @@ const CandidateResumePanel = () => {
   const [resumeId, setResumeId] = useState('');
   const [resumeStatus, setResumeStatus] = useState(null);
   const [resumeData, setResumeData] = useState(null);
-  const [interviewData, setInterviewData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadingAction, setLoadingAction] = useState('');
   const [error, setError] = useState('');
@@ -318,48 +316,20 @@ const CandidateResumePanel = () => {
     }
   };
 
-  const handleStartInterview = async () => {
-    setLoading(true);
-    setLoadingAction('interview');
-    setError('');
-
-    try {
-      const response = await withAuth((token) => startInterviewSession(token));
-
-      if (!response) {
-        return;
-      }
-
-      const data = await parseResponseBody(response);
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Unable to start interview session.');
-      }
-
-      setInterviewData(data);
-    } catch (interviewError) {
-      setInterviewData(null);
-      setError(interviewError.message || 'Unable to start interview session.');
-    } finally {
-      setLoading(false);
-      setLoadingAction('');
-    }
-  };
-
   return (
     <div className="bg-white rounded-3xl shadow-xl p-6 mb-8">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
         <div>
           <h3 className="text-xl font-bold text-gray-800">Resume Tools</h3>
           <p className="text-sm text-gray-500 mt-1">
-            Upload, verify, download, analyze your resume, and launch an interview session.
+            Upload, verify, download, analyze your resume, and open your dedicated AI interview workspace.
           </p>
         </div>
         <button
           onClick={() => navigate('/mock-interview')}
           className="px-5 py-2 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-xl hover:shadow-lg transition font-medium"
         >
-          Open Mock Interview
+          Open AI Interview
         </button>
       </div>
 
@@ -444,16 +414,12 @@ const CandidateResumePanel = () => {
                       Resume Analysis
                     </button>
                     <button
-                      onClick={handleStartInterview}
+                      onClick={() => navigate('/mock-interview', { state: { autoStart: true } })}
                       disabled={loading}
                       className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl hover:bg-white transition flex items-center gap-2 disabled:opacity-50"
                     >
-                      {loadingAction === 'interview' ? (
-                        <FaSpinner className="animate-spin" />
-                      ) : (
-                        <FaPlay />
-                      )}
-                      Start Interview
+                      <FaPlay />
+                      Open & Start AI Interview
                     </button>
                   </div>
                 </div>
@@ -551,51 +517,6 @@ const CandidateResumePanel = () => {
           </div>
         )}
 
-        {interviewData && (
-          <div className="mt-6 rounded-2xl bg-white border border-gray-100 shadow-sm p-5">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-gray-800">AI Mock Interview Session</p>
-                <p className="text-sm text-gray-500 mt-1">
-                  Interview ID: {interviewData.interviewId || 'N/A'}
-                </p>
-              </div>
-              <span className="inline-flex w-fit rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700 border border-teal-100">
-                {interviewData.sessionStatus || 'STARTED'}
-              </span>
-            </div>
-
-            <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="rounded-2xl bg-gray-50 p-4">
-                <p className="text-sm text-gray-500">Question Number</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900">
-                  {interviewData.currentQuestionNumber ?? 'N/A'}
-                </p>
-              </div>
-              <div className="rounded-2xl bg-gray-50 p-4">
-                <p className="text-sm text-gray-500">Total Questions</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900">
-                  {interviewData.totalQuestions ?? 'N/A'}
-                </p>
-              </div>
-              <div className="rounded-2xl bg-gray-50 p-4">
-                <p className="text-sm text-gray-500">Progress</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900">
-                  {interviewData.currentQuestionNumber && interviewData.totalQuestions
-                    ? `${interviewData.currentQuestionNumber}/${interviewData.totalQuestions}`
-                    : 'N/A'}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-2xl bg-teal-50 border border-teal-100 p-4">
-              <p className="text-sm font-semibold text-gray-800">Current Question</p>
-              <p className="mt-2 text-sm leading-6 text-gray-700">
-                {interviewData.question || 'No interview question received.'}
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
