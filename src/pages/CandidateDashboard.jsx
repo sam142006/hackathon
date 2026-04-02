@@ -250,9 +250,7 @@ const CandidateDashboard = () => {
               <button className="px-6 py-2 bg-white/20 backdrop-blur rounded-xl font-semibold hover:bg-white/30 transition flex items-center gap-2">
                 <FaFileAlt /> Resume Builder
               </button>
-              <button className="px-6 py-2 bg-white/20 backdrop-blur rounded-xl font-semibold hover:bg-white/30 transition flex items-center gap-2">
-                <FaChartLine /> Career Path
-              </button>
+              
               <button
                 onClick={() => navigate('/mock-interview')}
                 className="px-6 py-2 bg-white/20 backdrop-blur rounded-xl font-semibold hover:bg-white/30 transition flex items-center gap-2"
