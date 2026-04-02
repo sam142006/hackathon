@@ -1,6 +1,10 @@
 import { apiRequest } from './api';
 
-
+export const startInterviewSession = (token) =>
+  apiRequest('/api/interview/start-session', {
+    method: 'POST',
+    token,
+  });
 
   
 
@@ -12,5 +16,11 @@ export const submitInterviewAnswer = (token, payload) =>
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
+  });
+
+export const getInterviewResult = (token) =>
+  apiRequest('/api/interview/result', {
+    method: 'GET',
+    token,
   });
 
