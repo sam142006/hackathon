@@ -1,8 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaChartLine, FaDownload, FaSpinner, FaTrash, FaUpload } from 'react-icons/fa';
-import { apiRequest } from '../utils/api';
+import { FaChartLine, FaFileAlt, FaSpinner, FaUpload } from 'react-icons/fa';
 import { clearSession, getStoredToken } from '../utils/auth';
+import {
+  checkResumeExists,
+  getResumeAnalysis,
+  uploadResume,
+} from '../utils/resume';
 
 const parseResponseBody = async (response) => {
   const text = await response.text();
@@ -18,22 +22,39 @@ const parseResponseBody = async (response) => {
   }
 };
 
+const normalizeSkills = (skills) => {
+  if (!Array.isArray(skills)) {
+    return [];
+  }
+
+  return skills.filter((skill) => typeof skill === 'string' && skill.trim() !== '');
+};
+
+const formatScore = (score) => {
+  if (score === null || score === undefined || score === '') {
+    return 'N/A';
+  }
+
+  return Number.isFinite(Number(score)) ? `${score}` : String(score);
+};
+
 const CandidateResumePanel = () => {
   const navigate = useNavigate();
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [message, setMessage] = useState('');
+  const fileInputRef = useRef(null);
+  const [file, setFile] = useState(null);
+  const [resumeData, setResumeData] = useState(null);
+  const [resumeMeta, setResumeMeta] = useState({
+    uploaded: false,
+    resumeId: null,
+    fileName: '',
+  });
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [analysis, setAnalysis] = useState(null);
-  const [loadingAction, setLoadingAction] = useState('');
 
-  const hasAnalysis = Boolean(analysis);
-  const formattedAnalysis = useMemo(() => {
-    if (!analysis) {
-      return '';
-    }
-
-    return typeof analysis === 'string' ? analysis : JSON.stringify(analysis, null, 2);
-  }, [analysis]);
+  const resumeSkills = useMemo(
+    () => normalizeSkills(resumeData?.extractedSkills),
+    [resumeData]
+  );
 
   const handleUnauthorized = () => {
     clearSession();
@@ -58,52 +79,119 @@ const CandidateResumePanel = () => {
     return response;
   };
 
-  const resetFeedback = () => {
-    setMessage('');
-    setError('');
+  const fetchResumeAnalysis = async () => {
+    const response = await withAuth((token) => getResumeAnalysis(token));
+
+    if (!response) {
+      return null;
+    }
+
+    const data = await parseResponseBody(response);
+
+    if (response.status === 400) {
+      setResumeData(null);
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Unable to fetch resume analysis.');
+    }
+
+    setResumeData(data);
+    return data;
   };
 
-  const handleFileChange = (event) => {
-    resetFeedback();
-    const file = event.target.files?.[0];
+  const loadResumeState = async () => {
+    setLoading(true);
+    setError('');
 
-    if (!file) {
-      setSelectedFile(null);
+    try {
+      const response = await withAuth((token) => checkResumeExists(token));
+
+      if (!response) {
+        return;
+      }
+
+      const data = await parseResponseBody(response);
+
+      if (response.status === 400) {
+        setResumeMeta({
+          uploaded: false,
+          resumeId: null,
+          fileName: '',
+        });
+        setResumeData(null);
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Unable to check resume status.');
+      }
+
+      setResumeMeta({
+        uploaded: Boolean(data.uploaded),
+        resumeId: data.resumeId ?? null,
+        fileName: data.fileName ?? '',
+      });
+
+      if (data.uploaded) {
+        await fetchResumeAnalysis();
+      } else {
+        setResumeData(null);
+      }
+    } catch (loadError) {
+      setError(loadError.message || 'Unable to load resume details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadResumeState();
+  }, []);
+
+  const handleFileChange = (event) => {
+    setError('');
+    const selectedFile = event.target.files?.[0] ?? null;
+
+    if (!selectedFile) {
+      setFile(null);
       return;
     }
 
     const isPdf =
-      file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      selectedFile.type === 'application/pdf' ||
+      selectedFile.name.toLowerCase().endsWith('.pdf');
 
     if (!isPdf) {
-      setSelectedFile(null);
+      setFile(null);
       setError('Only PDF resumes are allowed.');
+      event.target.value = '';
       return;
     }
 
-    setSelectedFile(file);
+    setFile(selectedFile);
+  };
+
+  const resetSelectedFile = () => {
+    setFile(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleUploadResume = async () => {
-    if (!selectedFile) {
+    if (!file) {
       setError('Choose a PDF file before uploading.');
       return;
     }
 
-    resetFeedback();
-    setLoadingAction('upload');
+    setLoading(true);
+    setError('');
 
     try {
-      const formData = new FormData();
-      formData.append('resume', selectedFile);
-
-      const response = await withAuth((token) =>
-        apiRequest('/api/resume/upload', {
-          method: 'POST',
-          token,
-          body: formData,
-        })
-      );
+      const response = await withAuth((token) => uploadResume(token, file));
 
       if (!response) {
         return;
@@ -115,124 +203,32 @@ const CandidateResumePanel = () => {
         throw new Error(data.message || 'Resume upload failed.');
       }
 
-      setMessage(data.message || 'Resume uploaded successfully.');
-      setSelectedFile(null);
+      setResumeMeta((currentMeta) => ({
+        uploaded: true,
+        resumeId: data.resumeId ?? currentMeta.resumeId,
+        fileName: file.name,
+      }));
+      setResumeData(data);
+      resetSelectedFile();
     } catch (uploadError) {
       setError(uploadError.message || 'Resume upload failed.');
     } finally {
-      setLoadingAction('');
+      setLoading(false);
     }
   };
 
-  const handleDeleteResume = async () => {
-    resetFeedback();
-    setLoadingAction('delete');
-
-    try {
-      const response = await withAuth((token) =>
-        apiRequest('/api/resume/delete', {
-          method: 'DELETE',
-          token,
-        })
-      );
-
-      if (!response) {
-        return;
-      }
-
-      const data = await parseResponseBody(response);
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Resume delete failed.');
-      }
-
-      setAnalysis(null);
-      setMessage(data.message || 'Resume deleted successfully.');
-    } catch (deleteError) {
-      setError(deleteError.message || 'Resume delete failed.');
-    } finally {
-      setLoadingAction('');
-    }
-  };
-
-  const handleDownloadResume = async () => {
-    resetFeedback();
-    setLoadingAction('download');
-
-    try {
-      const response = await withAuth((token) =>
-        apiRequest('/api/resume/download', {
-          method: 'GET',
-          token,
-        })
-      );
-
-      if (!response) {
-        return;
-      }
-
-      if (!response.ok) {
-        const data = await parseResponseBody(response);
-        throw new Error(data.message || 'Resume download failed.');
-      }
-
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-
-      anchor.href = downloadUrl;
-      anchor.download = 'resume.pdf';
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-
-      setMessage('Resume download started.');
-    } catch (downloadError) {
-      setError(downloadError.message || 'Resume download failed.');
-    } finally {
-      setLoadingAction('');
-    }
-  };
-
-  const handleGetAnalysis = async () => {
-    resetFeedback();
-    setLoadingAction('analysis');
-
-    try {
-      const response = await withAuth((token) =>
-        apiRequest('/api/resume/analysis', {
-          method: 'GET',
-          token,
-        })
-      );
-
-      if (!response) {
-        return;
-      }
-
-      const data = await parseResponseBody(response);
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Resume analysis failed.');
-      }
-
-      setAnalysis(data);
-      setMessage('Resume analysis loaded successfully.');
-    } catch (analysisError) {
-      setError(analysisError.message || 'Resume analysis failed.');
-    } finally {
-      setLoadingAction('');
-    }
+  const handleReuploadClick = () => {
+    setError('');
+    fileInputRef.current?.click();
   };
 
   return (
     <div className="bg-white rounded-3xl shadow-xl p-6 mb-8">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
         <div>
-          <h3 className="text-xl font-bold text-gray-800">Resume Tools</h3>
+          <h3 className="text-xl font-bold text-gray-800">Resume Insights</h3>
           <p className="text-sm text-gray-500 mt-1">
-            Upload, manage, download, and analyze your latest PDF resume.
+            Upload your latest PDF resume and review its analysis instantly.
           </p>
         </div>
         <button
@@ -243,81 +239,116 @@ const CandidateResumePanel = () => {
         </button>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 lg:items-center">
-        <input
-          type="file"
-          accept="application/pdf,.pdf"
-          onChange={handleFileChange}
-          className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-xl file:border-0 file:bg-teal-50 file:px-4 file:py-2 file:font-medium file:text-teal-700 hover:file:bg-teal-100"
-        />
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={handleUploadResume}
-            disabled={loadingAction !== ''}
-            className="px-4 py-2 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-xl hover:shadow-lg transition flex items-center gap-2 disabled:opacity-50"
-          >
-            {loadingAction === 'upload' ? <FaSpinner className="animate-spin" /> : <FaUpload />}
-            Upload Resume
-          </button>
-          <button
-            onClick={handleDeleteResume}
-            disabled={loadingAction !== ''}
-            className="px-4 py-2 border border-red-200 text-red-600 rounded-xl hover:bg-red-50 transition flex items-center gap-2 disabled:opacity-50"
-          >
-            {loadingAction === 'delete' ? <FaSpinner className="animate-spin" /> : <FaTrash />}
-            Delete
-          </button>
-          <button
-            onClick={handleDownloadResume}
-            disabled={loadingAction !== ''}
-            className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition flex items-center gap-2 disabled:opacity-50"
-          >
-            {loadingAction === 'download' ? (
-              <FaSpinner className="animate-spin" />
-            ) : (
-              <FaDownload />
+      <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 via-white to-green-50 p-5">
+        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
+          <div className="flex-1">
+            <div className="flex items-start gap-3">
+              <div className="mt-1 rounded-2xl bg-white p-3 shadow-sm border border-teal-100">
+                <FaFileAlt className="text-lg text-teal-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Resume Status</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {resumeMeta.uploaded
+                    ? `Uploaded${resumeMeta.fileName ? `: ${resumeMeta.fileName}` : ''}`
+                    : 'No resume uploaded yet'}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={handleFileChange}
+                className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-xl file:border-0 file:bg-white file:px-4 file:py-2 file:font-medium file:text-teal-700 hover:file:bg-teal-100"
+              />
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handleUploadResume}
+                  disabled={loading}
+                  className="px-4 py-2 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-xl hover:shadow-lg transition flex items-center gap-2 disabled:opacity-50"
+                >
+                  {loading ? <FaSpinner className="animate-spin" /> : <FaUpload />}
+                  {resumeMeta.uploaded ? 'Upload New Resume' : 'Upload Resume'}
+                </button>
+                {resumeMeta.uploaded && (
+                  <button
+                    onClick={handleReuploadClick}
+                    disabled={loading}
+                    className="px-4 py-2 border border-teal-200 text-teal-700 rounded-xl hover:bg-white transition disabled:opacity-50"
+                  >
+                    Re-upload Resume
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {file && (
+              <p className="mt-3 text-sm text-gray-500">
+                Selected file: <span className="font-medium text-gray-700">{file.name}</span>
+              </p>
             )}
-            Download
-          </button>
-          <button
-            onClick={handleGetAnalysis}
-            disabled={loadingAction !== ''}
-            className="px-4 py-2 border border-teal-200 text-teal-700 rounded-xl hover:bg-teal-50 transition flex items-center gap-2 disabled:opacity-50"
-          >
-            {loadingAction === 'analysis' ? (
-              <FaSpinner className="animate-spin" />
-            ) : (
-              <FaChartLine />
+
+            {error && (
+              <div className="mt-4 rounded-2xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
             )}
-            Get Analysis
-          </button>
+          </div>
+
+          <div className="min-w-[180px] rounded-2xl bg-white border border-teal-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-600">
+              Resume Score
+            </p>
+            <p className="mt-2 text-4xl font-bold text-gray-900">
+              {loading && !resumeData ? <FaSpinner className="animate-spin text-2xl" /> : formatScore(resumeData?.resumeScore)}
+            </p>
+            <p className="mt-2 text-sm text-gray-500">Analysis updates after every upload.</p>
+          </div>
         </div>
+
+        {resumeData && (
+          <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4 lg:col-span-1">
+              <p className="text-sm font-semibold text-gray-800">Experience</p>
+              <p className="mt-2 text-2xl font-bold text-gray-900">
+                {resumeData.experienceYears ?? 'N/A'}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">Years detected from the uploaded resume.</p>
+            </div>
+
+            <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4 lg:col-span-2">
+              <div className="flex items-center gap-2 mb-3">
+                <FaChartLine className="text-teal-600" />
+                <p className="text-sm font-semibold text-gray-800">Extracted Skills</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {resumeSkills.length > 0 ? (
+                  resumeSkills.map((skill) => (
+                    <span
+                      key={skill}
+                      className="px-3 py-1.5 rounded-full bg-teal-50 text-teal-700 text-sm border border-teal-100"
+                    >
+                      {skill}
+                    </span>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">No skills were extracted yet.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4 lg:col-span-3">
+              <p className="text-sm font-semibold text-gray-800">Summary</p>
+              <p className="mt-3 text-sm leading-6 text-gray-600">
+                {resumeData.summary || 'No summary is available for this resume yet.'}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
-
-      {selectedFile && (
-        <p className="text-sm text-gray-500 mt-3">Selected file: {selectedFile.name}</p>
-      )}
-
-      {message && (
-        <div className="mt-4 rounded-2xl bg-green-50 border border-green-100 px-4 py-3 text-sm text-green-700">
-          {message}
-        </div>
-      )}
-
-      {error && (
-        <div className="mt-4 rounded-2xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {hasAnalysis && (
-        <div className="mt-5 rounded-2xl bg-teal-50 border border-teal-100 p-4">
-          <h4 className="text-base font-semibold text-gray-800 mb-2">Resume Analysis</h4>
-          <pre className="text-sm text-gray-700 whitespace-pre-wrap break-words font-sans">
-            {formattedAnalysis}
-          </pre>
-        </div>
-      )}
     </div>
   );
 };
