@@ -92,4 +92,12 @@ export const updateApplicationStatus = (token, applicationId, payload) =>
     body: JSON.stringify(payload),
   });
 
-
+export const toggleRecruiterJobStatus = (token, jobId, payload) =>
+  apiRequest(`/api/recruiter/jobs/${jobId}/status`, {
+    method: 'PUT',
+    token,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
