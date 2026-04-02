@@ -24,3 +24,8 @@ export const getInterviewResult = (token) =>
     token,
   });
 
+export const endInterviewSession = (token) =>
+  apiRequest('/api/interview/end-session', {
+    method: 'POST',
+    token,
+  });
