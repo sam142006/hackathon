@@ -574,20 +574,6 @@ const RecruiterDashboard = () => {
                                   )}
                                 </button>
                                 <button
-                                  onClick={() => handleGenerateSkillGap(application)}
-                                  disabled={skillGapLoadingId === application.id}
-                                  className="px-4 py-2 border border-teal-200 text-teal-700 rounded-xl hover:bg-teal-50 transition disabled:opacity-50"
-                                >
-                                  {skillGapLoadingId === application.id ? (
-                                    <span className="inline-flex items-center gap-2">
-                                      <FaSpinner className="animate-spin" />
-                                      Generating
-                                    </span>
-                                  ) : (
-                                    'Generate Skill Gap'
-                                  )}
-                                </button>
-                                <button
                                   onClick={() =>
                                     navigate('/recruiter-chat', {
                                       state: {

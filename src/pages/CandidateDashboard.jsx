@@ -14,6 +14,7 @@ import {
   FaGithub,
   FaGlobe,
   FaGraduationCap,
+  FaMapSigns,
   FaLinkedin,
   FaMapMarkerAlt,
   FaRegHeart,
@@ -25,7 +26,7 @@ import {
 } from 'react-icons/fa';
 import CandidateResumePanel from '../components/CandidateResumePanel';
 import { clearSession, getStoredToken } from '../utils/auth';
-import { applyForJob, getCandidateJobs, mapJobFromApi } from '../utils/jobs';
+import { applyForJob, getCandidateJobs, getSkillGapRoadmap, mapJobFromApi } from '../utils/jobs';
 
 const parseResponseBody = async (response) => {
   const text = await response.text();
@@ -80,9 +81,12 @@ const CandidateDashboard = () => {
   const [applyModalJob, setApplyModalJob] = useState(null);
   const [coverLetter, setCoverLetter] = useState('');
   const [applying, setApplying] = useState(false);
+  const [skillGapLoadingJobId, setSkillGapLoadingJobId] = useState(null);
+  const [skillGapData, setSkillGapData] = useState(null);
 
   const userName = localStorage.getItem('userName') || 'Alex Morgan';
   const userEmail = localStorage.getItem('userEmail') || 'alex.morgan@example.com';
+  const candidateId = localStorage.getItem('userId') || '';
   const userAvatar = userName
     .split(' ')
     .map((name) => name[0])
@@ -237,6 +241,47 @@ const CandidateDashboard = () => {
   const closeApplyModal = () => {
     setApplyModalJob(null);
     setCoverLetter('');
+  };
+
+  const handleGenerateSkillGap = async (job) => {
+    if (!candidateId) {
+      setError('Candidate ID is missing for skill-gap generation.');
+      setMessage('');
+      return;
+    }
+
+    setSkillGapLoadingJobId(job.id);
+    setSkillGapData(null);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await withAuth((token) =>
+        getSkillGapRoadmap(token, candidateId, job.id)
+      );
+
+      if (!response) {
+        return;
+      }
+
+      const data = await parseResponseBody(response);
+
+      if (!response.ok) {
+        throw new Error(getResponseMessage(data) || 'Unable to generate skill-gap roadmap.');
+      }
+
+      setSkillGapData({
+        jobId: job.id,
+        missingSkills: Array.isArray(data.missingSkills) ? data.missingSkills : [],
+        roadmap: data.roadmap ?? data.roadmapText ?? 'No roadmap available.',
+        learningResources: Array.isArray(data.learningResources) ? data.learningResources : [],
+      });
+      setMessage(`Skill-gap roadmap generated for ${job.title}.`);
+    } catch (skillGapError) {
+      setError(skillGapError.message || 'Unable to generate skill-gap roadmap.');
+    } finally {
+      setSkillGapLoadingJobId(null);
+    }
   };
 
   const cacheAppliedJob = (jobId, applicationId = null) => {
@@ -595,6 +640,16 @@ const CandidateDashboard = () => {
                           Chat
                         </button>
                       )}
+                      {job.applied && (
+                        <button
+                          onClick={() => handleGenerateSkillGap(job)}
+                          disabled={skillGapLoadingJobId === job.id}
+                          className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
+                        >
+                          {skillGapLoadingJobId === job.id ? <FaSpinner className="animate-spin" /> : <FaMapSigns />}
+                          Skill Gap
+                        </button>
+                      )}
                     </div>
                     <button
                       onClick={() => openApplyModal(job)}
@@ -608,6 +663,74 @@ const CandidateDashboard = () => {
                       <FaEye /> {job.applied ? 'Applied' : 'Apply Now'}
                     </button>
                   </div>
+                  {skillGapData?.jobId === job.id && (
+                    <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+                      <p className="text-sm font-semibold text-gray-800">Skill Gap Roadmap</p>
+                      <div className="mt-4">
+                        <p className="text-sm font-semibold text-gray-700">Missing Skills</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {skillGapData.missingSkills.length > 0 ? (
+                            skillGapData.missingSkills.map((skill) => (
+                              <span
+                                key={skill}
+                                className="px-2 py-1 bg-white text-blue-700 text-xs rounded-lg border border-blue-100"
+                              >
+                                {skill}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-sm text-gray-500">No missing skills returned.</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-4">
+                        <p className="text-sm font-semibold text-gray-700">Roadmap</p>
+                        <p className="mt-2 text-sm leading-6 text-gray-600">{skillGapData.roadmap}</p>
+                      </div>
+                      <div className="mt-4">
+                        <p className="text-sm font-semibold text-gray-700">Learning Resources</p>
+                        <div className="mt-3 space-y-3">
+                          {skillGapData.learningResources.length > 0 ? (
+                            skillGapData.learningResources.map((resource, index) => (
+                              <div
+                                key={`${resource.skillName ?? resource.skill ?? 'resource'}-${index}`}
+                                className="rounded-2xl bg-white border border-gray-100 p-4"
+                              >
+                                <p className="text-sm font-semibold text-gray-800">
+                                  {resource.skillName ?? resource.skill ?? 'Skill Resource'}
+                                </p>
+                                <div className="mt-3 space-y-3">
+                                  {Array.isArray(resource.videos) && resource.videos.length > 0 ? (
+                                    resource.videos.map((video, videoIndex) => (
+                                      <a
+                                        key={`${video.title ?? 'video'}-${videoIndex}`}
+                                        href={video.url || video.link || '#'}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="block rounded-xl border border-gray-100 p-3 hover:border-blue-200 hover:bg-blue-50 transition"
+                                      >
+                                        <p className="text-sm font-semibold text-blue-700">
+                                          {video.title ?? 'Learning Video'}
+                                        </p>
+                                        <p className="mt-1 text-xs text-gray-500">
+                                          {video.channel ?? 'Channel'}
+                                          {video.views ? ` • ${video.views}` : ''}
+                                        </p>
+                                      </a>
+                                    ))
+                                  ) : (
+                                    <p className="text-sm text-gray-500">No videos available.</p>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-sm text-gray-500">No learning resources returned.</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
