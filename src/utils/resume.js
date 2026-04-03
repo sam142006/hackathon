@@ -12,6 +12,12 @@ export const uploadResume = (token, file) => {
   });
 };
 
+export const checkCandidateResumeExists = (token) =>
+  apiRequest('/api/candidate/profile/resume/exists', {
+    method: 'GET',
+    token,
+  });
+
 export const checkResumeExists = (token, resumeId) =>
   apiRequest(`/api/resumes/${resumeId}/exists`, {
     method: 'GET',

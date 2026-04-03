@@ -32,12 +32,19 @@ export const mapJobFromApi = (job) => ({
 
 export const mapApplicationFromApi = (application) => ({
   id: application.id ?? application.applicationId ?? crypto.randomUUID(),
+  candidateId: application.candidateId ?? application.candidate?.id ?? application.userId ?? null,
   candidateName:
     application.candidateName ??
     application.name ??
     application.candidate?.name ??
     'Candidate',
   email: application.email ?? application.candidateEmail ?? application.candidate?.email ?? 'N/A',
+  resumeId:
+    application.resumeId ??
+    application.candidateResumeId ??
+    application.candidate?.resumeId ??
+    application.candidate?.resume?.id ??
+    null,
   skills: normalizeSkills(application.skills ?? application.candidateSkills ?? application.candidate?.skills),
   coverLetter: application.coverLetter ?? application.message ?? 'No cover letter provided.',
   status: application.status ?? 'PENDING',
@@ -70,7 +77,11 @@ export const createRecruiterJob = (token, payload) =>
     body: JSON.stringify(payload),
   });
 
-
+export const getRecruiterJobs = (token) =>
+  apiRequest('/api/recruiter/jobs', {
+    method: 'GET',
+    token,
+  });
 
 export const getJobApplications = (token, jobId) =>
   apiRequest(`/api/recruiter/jobs/${jobId}/applications`, {
@@ -97,3 +108,5 @@ export const toggleRecruiterJobStatus = (token, jobId, payload) =>
     },
     body: JSON.stringify(payload),
   });
+
+

@@ -24,8 +24,10 @@ import {
 import { clearSession, getStoredToken } from '../utils/auth';
 import {
   createRecruiterJob,
+  downloadCandidateResume,
   getJobApplications,
   getRecruiterJobs,
+  getSkillGapRoadmap,
   mapApplicationFromApi,
   mapJobFromApi,
   toggleRecruiterJobStatus,
@@ -77,6 +79,9 @@ const RecruiterDashboard = () => {
   const [submitting, setSubmitting] = useState(false);
   const [updatingJobId, setUpdatingJobId] = useState(null);
   const [updatingApplicationId, setUpdatingApplicationId] = useState(null);
+  const [downloadingResumeId, setDownloadingResumeId] = useState(null);
+  const [skillGapLoadingId, setSkillGapLoadingId] = useState(null);
+  const [skillGapData, setSkillGapData] = useState(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [formData, setFormData] = useState(createInitialFormData);
@@ -282,6 +287,93 @@ const RecruiterDashboard = () => {
     }
   };
 
+  const handleDownloadResume = async (application) => {
+    if (!application.resumeId) {
+      setError('Resume is not available for this candidate.');
+      return;
+    }
+
+    setDownloadingResumeId(application.resumeId);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await withAuth((token) =>
+        downloadCandidateResume(token, application.resumeId)
+      );
+
+      if (!response) {
+        return;
+      }
+
+      if (!response.ok) {
+        const data = await parseResponseBody(response);
+        throw new Error(data.message || 'Unable to download candidate resume.');
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const contentDisposition = response.headers.get('content-disposition');
+      const fileNameMatch = contentDisposition?.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
+
+      link.href = downloadUrl;
+      link.download = fileNameMatch?.[1]
+        ? decodeURIComponent(fileNameMatch[1].replace(/"/g, ''))
+        : `candidate-resume-${application.resumeId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
+      setMessage(`Resume downloaded for ${application.candidateName}.`);
+    } catch (downloadError) {
+      setError(downloadError.message || 'Unable to download candidate resume.');
+    } finally {
+      setDownloadingResumeId(null);
+    }
+  };
+
+  const handleGenerateSkillGap = async (application) => {
+    if (!application.candidateId || !selectedJobId) {
+      setError('Candidate ID or job ID is missing for skill-gap generation.');
+      return;
+    }
+
+    setSkillGapLoadingId(application.id);
+    setSkillGapData(null);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await withAuth((token) =>
+        getSkillGapRoadmap(token, application.candidateId, selectedJobId)
+      );
+
+      if (!response) {
+        return;
+      }
+
+      const data = await parseResponseBody(response);
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Unable to generate skill-gap roadmap.');
+      }
+
+      setSkillGapData({
+        applicationId: application.id,
+        missingSkills: Array.isArray(data.missingSkills) ? data.missingSkills : [],
+        roadmap: data.roadmap ?? data.roadmapText ?? 'No roadmap available.',
+        learningResources: Array.isArray(data.learningResources) ? data.learningResources : [],
+      });
+      setMessage(`Skill-gap roadmap generated for ${application.candidateName}.`);
+    } catch (skillGapError) {
+      setError(skillGapError.message || 'Unable to generate skill-gap roadmap.');
+    } finally {
+      setSkillGapLoadingId(null);
+    }
+  };
+
   const selectedApplications = selectedJobId ? applications : [];
 
   return (
@@ -470,6 +562,41 @@ const RecruiterDashboard = () => {
                                 <p className="text-sm font-semibold text-gray-800">Cover Letter</p>
                                 <p className="mt-2 text-sm leading-6 text-gray-600">{application.coverLetter}</p>
                               </div>
+                              <div className="mt-4 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2 text-xs text-gray-500">
+                                Candidate ID: {application.candidateId ?? 'N/A'} | Resume ID: {application.resumeId ?? 'N/A'} | Application ID: {application.id} | Job ID: {selectedJobId ?? 'N/A'}
+                              </div>
+                              <div className="mt-4 flex flex-wrap gap-2">
+                                <button
+                                  onClick={() => handleDownloadResume(application)}
+                                  disabled={!application.resumeId || downloadingResumeId === application.resumeId}
+                                  className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition disabled:opacity-50"
+                                >
+                                  {!application.resumeId ? (
+                                    'Resume Unavailable'
+                                  ) : downloadingResumeId === application.resumeId ? (
+                                    <span className="inline-flex items-center gap-2">
+                                      <FaSpinner className="animate-spin" />
+                                      Downloading
+                                    </span>
+                                  ) : (
+                                    'Download Resume'
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => handleGenerateSkillGap(application)}
+                                  disabled={skillGapLoadingId === application.id}
+                                  className="px-4 py-2 border border-teal-200 text-teal-700 rounded-xl hover:bg-teal-50 transition disabled:opacity-50"
+                                >
+                                  {skillGapLoadingId === application.id ? (
+                                    <span className="inline-flex items-center gap-2">
+                                      <FaSpinner className="animate-spin" />
+                                      Generating
+                                    </span>
+                                  ) : (
+                                    'Generate Skill Gap'
+                                  )}
+                                </button>
+                              </div>
                               <div className="mt-5 grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-3 items-start">
                                 <select value={draft.status} onChange={(event) => handleStatusDraftChange(application.id, 'status', event.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
                                   {APPLICATION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
@@ -479,6 +606,76 @@ const RecruiterDashboard = () => {
                                   {updatingApplicationId === application.id ? <span className="inline-flex items-center gap-2"><FaSpinner className="animate-spin" /> Saving</span> : 'Update'}
                                 </button>
                               </div>
+                              {skillGapData?.applicationId === application.id && (
+                                <div className="mt-5 rounded-2xl border border-teal-100 bg-teal-50/70 p-4">
+                                  <p className="text-sm font-semibold text-gray-800">Skill Gap Roadmap</p>
+                                  <div className="mt-4">
+                                    <p className="text-sm font-semibold text-gray-700">Missing Skills</p>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {skillGapData.missingSkills.length > 0 ? (
+                                        skillGapData.missingSkills.map((skill) => (
+                                          <span
+                                            key={skill}
+                                            className="px-2 py-1 bg-white text-teal-700 text-xs rounded-lg border border-teal-100"
+                                          >
+                                            {skill}
+                                          </span>
+                                        ))
+                                      ) : (
+                                        <span className="text-sm text-gray-500">No missing skills returned.</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="mt-4">
+                                    <p className="text-sm font-semibold text-gray-700">Roadmap</p>
+                                    <p className="mt-2 text-sm leading-6 text-gray-600">
+                                      {skillGapData.roadmap}
+                                    </p>
+                                  </div>
+                                  <div className="mt-4">
+                                    <p className="text-sm font-semibold text-gray-700">Learning Resources</p>
+                                    <div className="mt-3 space-y-3">
+                                      {skillGapData.learningResources.length > 0 ? (
+                                        skillGapData.learningResources.map((resource, index) => (
+                                          <div
+                                            key={`${resource.skillName ?? resource.skill ?? 'resource'}-${index}`}
+                                            className="rounded-2xl bg-white border border-gray-100 p-4"
+                                          >
+                                            <p className="text-sm font-semibold text-gray-800">
+                                              {resource.skillName ?? resource.skill ?? 'Skill Resource'}
+                                            </p>
+                                            <div className="mt-3 space-y-3">
+                                              {Array.isArray(resource.videos) && resource.videos.length > 0 ? (
+                                                resource.videos.map((video, videoIndex) => (
+                                                  <a
+                                                    key={`${video.title ?? 'video'}-${videoIndex}`}
+                                                    href={video.url || video.link || '#'}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="block rounded-xl border border-gray-100 p-3 hover:border-teal-200 hover:bg-teal-50 transition"
+                                                  >
+                                                    <p className="text-sm font-semibold text-teal-700">
+                                                      {video.title ?? 'Learning Video'}
+                                                    </p>
+                                                    <p className="mt-1 text-xs text-gray-500">
+                                                      {video.channel ?? 'Channel'}
+                                                      {video.views ? ` • ${video.views}` : ''}
+                                                    </p>
+                                                  </a>
+                                                ))
+                                              ) : (
+                                                <p className="text-sm text-gray-500">No videos available.</p>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <p className="text-sm text-gray-500">No learning resources returned.</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}

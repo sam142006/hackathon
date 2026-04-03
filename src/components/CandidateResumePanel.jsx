@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FaChartLine,
@@ -11,6 +11,7 @@ import {
 } from 'react-icons/fa';
 import { clearSession, getStoredToken } from '../utils/auth';
 import {
+  checkCandidateResumeExists,
   checkResumeExists,
   downloadResume,
   getResumeAnalysis,
@@ -48,6 +49,24 @@ const getDownloadFileName = (response, fallbackResumeId) => {
   }
 
   return `resume-${fallbackResumeId}.pdf`;
+};
+
+const getResumePayload = (payload) => payload?.data ?? payload?.result ?? payload ?? {};
+
+const normalizeResumeAnalysis = (payload) => {
+  const data = getResumePayload(payload);
+
+  return {
+    resumeId: data.resumeId ?? data.id ?? null,
+    resumeScore: data.resumeScore ?? data.score ?? null,
+    extractedSkills: Array.isArray(data.extractedSkills)
+      ? data.extractedSkills
+      : Array.isArray(data.skills)
+        ? data.skills
+        : [],
+    experienceYears: data.experienceYears ?? data.experience ?? null,
+    summary: data.summary ?? data.resumeSummary ?? '',
+  };
 };
 
 const CandidateResumePanel = () => {
@@ -160,27 +179,35 @@ const CandidateResumePanel = () => {
         throw new Error(data.message || 'Resume upload failed.');
       }
 
-      syncResumeId(data.resumeId);
+      const normalizedAnalysis = normalizeResumeAnalysis(data);
+
+      syncResumeId(normalizedAnalysis.resumeId);
       setResumeStatus({
-        resumeId: data.resumeId ?? null,
+        resumeId: normalizedAnalysis.resumeId ?? null,
         exists: true,
         message: data.message || `${file.name} uploaded successfully.`,
       });
 
-      const uploadedAnalysis = {
-        resumeScore: data.resumeScore,
-        extractedSkills: data.extractedSkills,
-        experienceYears: data.experienceYears,
-        summary: data.summary,
-      };
-
       const hasAnalysis =
-        uploadedAnalysis.resumeScore !== undefined ||
-        uploadedAnalysis.extractedSkills !== undefined ||
-        uploadedAnalysis.experienceYears !== undefined ||
-        uploadedAnalysis.summary !== undefined;
+        normalizedAnalysis.resumeScore !== null ||
+        normalizedAnalysis.extractedSkills.length > 0 ||
+        normalizedAnalysis.experienceYears !== null ||
+        normalizedAnalysis.summary !== '';
 
-      setResumeData(hasAnalysis ? uploadedAnalysis : null);
+      if (hasAnalysis) {
+        setResumeData(normalizedAnalysis);
+      } else {
+        const analysisResponse = await withAuth((token) => getResumeAnalysis(token));
+
+        if (analysisResponse) {
+          const analysisData = await parseResponseBody(analysisResponse);
+
+          if (analysisResponse.ok) {
+            setResumeData(normalizeResumeAnalysis(analysisData));
+          }
+        }
+      }
+
       resetFileInput();
     } catch (uploadError) {
       setError(uploadError.message || 'Resume upload failed.');
@@ -189,6 +216,66 @@ const CandidateResumePanel = () => {
       setLoadingAction('');
     }
   };
+
+  const loadResumeOnMount = async () => {
+    setLoading(true);
+    setLoadingAction('init');
+    setError('');
+
+    try {
+      const existsResponse = await withAuth((token) => checkCandidateResumeExists(token));
+
+      if (!existsResponse) {
+        return;
+      }
+
+      const existsData = await parseResponseBody(existsResponse);
+
+      if (!existsResponse.ok) {
+        throw new Error(existsData.message || 'Unable to check uploaded resume.');
+      }
+
+      if (!existsData.uploaded) {
+        setResumeStatus(null);
+        setResumeData(null);
+        return;
+      }
+
+      syncResumeId(existsData.resumeId);
+      setResumeStatus({
+        resumeId: existsData.resumeId ?? null,
+        exists: true,
+        message: existsData.fileName
+          ? `${existsData.fileName} is already uploaded.`
+          : 'Resume already uploaded.',
+      });
+
+      const analysisResponse = await withAuth((token) => getResumeAnalysis(token));
+
+      if (!analysisResponse) {
+        return;
+      }
+
+      const analysisData = await parseResponseBody(analysisResponse);
+
+      if (!analysisResponse.ok) {
+        throw new Error(analysisData.message || 'Unable to load resume analysis.');
+      }
+
+      const normalizedAnalysis = normalizeResumeAnalysis(analysisData);
+      setResumeData(normalizedAnalysis);
+      syncResumeId(normalizedAnalysis.resumeId ?? existsData.resumeId);
+    } catch (loadError) {
+      setError(loadError.message || 'Unable to load saved resume.');
+    } finally {
+      setLoading(false);
+      setLoadingAction('');
+    }
+  };
+
+  useEffect(() => {
+    loadResumeOnMount();
+  }, []);
 
   const handleCheckResume = async () => {
     const effectiveResumeId = getEffectiveResumeId();
@@ -305,8 +392,9 @@ const CandidateResumePanel = () => {
         throw new Error(data.message || 'Unable to fetch resume analysis.');
       }
 
-      setResumeData(data);
-      syncResumeId(data.resumeId);
+      const normalizedAnalysis = normalizeResumeAnalysis(data);
+      setResumeData(normalizedAnalysis);
+      syncResumeId(normalizedAnalysis.resumeId);
     } catch (analysisError) {
       setResumeData(null);
       setError(analysisError.message || 'Unable to fetch resume analysis.');
