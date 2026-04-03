@@ -206,15 +206,10 @@ const CandidateDashboard = () => {
   };
 
   const openChatPage = (job) => {
-    if (!job.applicationId) {
-      setError('Chat is available once the jobs API returns your application ID for this role.');
-      setMessage('');
-      return;
-    }
-
     setError('');
     navigate('/candidate-chat', {
       state: {
+        targetId: job.id,
         applicationId: job.applicationId,
         jobId: job.id,
         jobTitle: job.title,

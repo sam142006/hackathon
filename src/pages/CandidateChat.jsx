@@ -22,12 +22,19 @@ const CandidateChat = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const messagesEndRef = useRef(null);
-  const applicationId = location.state?.applicationId ?? null;
-  const jobTitle = location.state?.jobTitle ?? 'Recruiter Chat';
-  const company = location.state?.company ?? 'SmartHire';
+  const targetId = location.state?.targetId ?? location.state?.jobId ?? location.state?.applicationId ?? null;
+  const currentRole = localStorage.getItem('userRole') || '';
+  const backPath =
+    location.state?.backPath ??
+    (currentRole.toUpperCase() === 'RECRUITER' ? '/recruiter-dashboard' : '/candidate-dashboard');
   const userEmail = localStorage.getItem('userEmail') || '';
 
   const [chatRoomId, setChatRoomId] = useState(null);
+  const [applicationId, setApplicationId] = useState(location.state?.applicationId ?? null);
+  const [jobTitle, setJobTitle] = useState(location.state?.jobTitle ?? 'Recruiter Chat');
+  const [company, setCompany] = useState(location.state?.company ?? 'SmartHire');
+  const [candidateName, setCandidateName] = useState(localStorage.getItem('userName') || 'Candidate');
+  const [recruiterName, setRecruiterName] = useState('Recruiter');
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -92,9 +99,9 @@ const CandidateChat = () => {
 
   useEffect(() => {
     const bootstrapChat = async () => {
-      if (!applicationId) {
+      if (!targetId) {
         setLoading(false);
-        setError('Application ID is missing for this chat. Open chat from an applied job card.');
+        setError('Job context is missing for this chat. Open chat from a job card.');
         return;
       }
 
@@ -102,7 +109,7 @@ const CandidateChat = () => {
       setError('');
 
       try {
-        const response = await withAuth((token) => initializeChat(token, applicationId));
+        const response = await withAuth((token) => initializeChat(token, targetId));
 
         if (!response) {
           return;
@@ -120,7 +127,12 @@ const CandidateChat = () => {
           throw new Error('Chat room ID was not returned by the server.');
         }
 
+        setApplicationId(data.applicationId ?? location.state?.applicationId ?? null);
         setChatRoomId(roomId);
+        setJobTitle(data.jobTitle ?? location.state?.jobTitle ?? 'Recruiter Chat');
+        setCompany(data.company ?? location.state?.company ?? 'SmartHire');
+        setCandidateName(data.candidateName ?? localStorage.getItem('userName') ?? 'Candidate');
+        setRecruiterName(data.recruiterName ?? 'Recruiter');
         await loadMessages(roomId);
       } catch (chatError) {
         setError(chatError.message || 'Unable to start chat.');
@@ -131,7 +143,7 @@ const CandidateChat = () => {
     };
 
     bootstrapChat();
-  }, [applicationId]);
+  }, [targetId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -139,6 +151,9 @@ const CandidateChat = () => {
 
   const handleSend = async () => {
     if (!applicationId || !messageInput.trim()) {
+      if (!applicationId) {
+        setError('Application ID is still not available for sending messages.');
+      }
       return;
     }
 
@@ -193,7 +208,7 @@ const CandidateChat = () => {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6 flex items-center justify-between gap-4">
           <button
-            onClick={() => navigate('/candidate-dashboard')}
+            onClick={() => navigate(backPath)}
             className="inline-flex items-center gap-2 rounded-2xl border border-white/70 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm"
           >
             <FaArrowLeft />
@@ -212,7 +227,11 @@ const CandidateChat = () => {
               </div>
               <div>
                 <h1 className="text-3xl font-bold">{jobTitle}</h1>
-                <p className="mt-1 text-sm text-emerald-50">Direct recruiter conversation with {company}</p>
+                <p className="mt-1 text-sm text-emerald-50">
+                  {currentRole.toUpperCase() === 'RECRUITER'
+                    ? `Chat with ${candidateName} about ${jobTitle}`
+                    : `Direct recruiter conversation with ${recruiterName} at ${company}`}
+                </p>
               </div>
             </div>
           </div>
@@ -288,6 +307,8 @@ const CandidateChat = () => {
 
             <div className="mt-5 text-sm text-slate-500">
               Chat Room ID: <span className="font-semibold text-slate-700">{chatRoomId ?? 'Connecting...'}</span>
+              {' '}| Application ID: <span className="font-semibold text-slate-700">{applicationId ?? 'Resolving...'}</span>
+              {' '}| Candidate: <span className="font-semibold text-slate-700">{candidateName}</span>
             </div>
           </div>
         </div>

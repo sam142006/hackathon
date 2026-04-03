@@ -21,6 +21,7 @@ function App() {
 
       <Route element={<ProtectedRoute allowedRoles={['RECRUITER']} />}>
         <Route path="/recruiter-dashboard" element={<RecruiterDashboard />} />
+        <Route path="/recruiter-chat" element={<CandidateChat />} />
         <Route path="/recruiter" element={<Navigate to="/recruiter-dashboard" replace />} />
       </Route>
 

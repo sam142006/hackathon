@@ -39,8 +39,8 @@ export const mapChatMessageFromApi = (message, currentUserEmail) => {
   };
 };
 
-export const initializeChat = (token, applicationId) =>
-  apiRequest(`/api/chat/init/${applicationId}`, {
+export const initializeChat = (token, targetId) =>
+  apiRequest(`/api/chat/init/${targetId}`, {
     method: 'POST',
     token,
   });

@@ -8,6 +8,7 @@ import {
   FaCheckCircle,
   FaChevronDown,
   FaChevronUp,
+  FaComments,
   FaFilter,
   FaList,
   FaMapMarkerAlt,
@@ -585,6 +586,24 @@ const RecruiterDashboard = () => {
                                   ) : (
                                     'Generate Skill Gap'
                                   )}
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    navigate('/recruiter-chat', {
+                                      state: {
+                                        targetId: application.id,
+                                        applicationId: application.id,
+                                        jobId: selectedJobId,
+                                        jobTitle: job.title,
+                                        company: job.company,
+                                        backPath: '/recruiter-dashboard',
+                                      },
+                                    })
+                                  }
+                                  className="px-4 py-2 border border-blue-200 text-blue-700 rounded-xl hover:bg-blue-50 transition inline-flex items-center gap-2"
+                                >
+                                  <FaComments />
+                                  Open Chat
                                 </button>
                               </div>
                               <div className="mt-5 grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-3 items-start">
