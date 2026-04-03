@@ -109,4 +109,10 @@ export const toggleRecruiterJobStatus = (token, jobId, payload) =>
     body: JSON.stringify(payload),
   });
 
+export const downloadCandidateResume = (token, resumeId) =>
+  apiRequest(`/api/resumes/${resumeId}/download`, {
+    method: 'GET',
+    token,
+  });
+
 
