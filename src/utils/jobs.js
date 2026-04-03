@@ -115,4 +115,8 @@ export const downloadCandidateResume = (token, resumeId) =>
     token,
   });
 
-
+export const getSkillGapRoadmap = (token, candidateId, jobId) =>
+  apiRequest(`/api/recruiter/skill-gap?candidateId=${candidateId}&jobId=${jobId}`, {
+    method: 'POST',
+    token,
+  });
