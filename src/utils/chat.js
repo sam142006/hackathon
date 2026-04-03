@@ -45,3 +45,10 @@ export const initializeChat = (token, applicationId) =>
     token,
   });
 
+export const getChatHistory = (token, chatRoomId) =>
+  apiRequest(`/api/chat/${chatRoomId}/messages`, {
+    method: 'GET',
+    token,
+  });
+
+
