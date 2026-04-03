@@ -1,6 +1,6 @@
 import { apiRequest } from './api';
 
-export const mapChatMessageFromApi = (message, currentUserEmail) => {
+export const mapChatMessageFromApi = (message, currentUserEmail, currentUserRole = '') => {
   const senderEmail =
     message.senderEmail ??
     message.fromEmail ??
@@ -12,18 +12,31 @@ export const mapChatMessageFromApi = (message, currentUserEmail) => {
     message.role ??
     message.sender?.role ??
     '';
-  const isOwnMessage =
+  const normalizedRole = senderRole.toUpperCase();
+  const normalizedCurrentUserRole = currentUserRole.toUpperCase();
+  const emailMatchesCurrentUser =
+    Boolean(
+      currentUserEmail &&
+        senderEmail &&
+        currentUserEmail.toLowerCase() === senderEmail.toLowerCase()
+    );
+  const explicitOwnership =
     typeof message.isOwnMessage === 'boolean'
       ? message.isOwnMessage
-      : Boolean(
-          message.sentByCurrentUser ??
-            message.sentByCandidate ??
-            message.mine ??
-            (currentUserEmail &&
-              senderEmail &&
-              currentUserEmail.toLowerCase() === senderEmail.toLowerCase()) ??
-            senderRole.toUpperCase() === 'CANDIDATE'
-        );
+      : typeof message.sentByCurrentUser === 'boolean'
+        ? message.sentByCurrentUser
+        : typeof message.mine === 'boolean'
+          ? message.mine
+          : null;
+  const roleMatchesCurrentUser =
+    normalizedCurrentUserRole && normalizedRole
+      ? normalizedCurrentUserRole === normalizedRole
+      : null;
+  const isOwnMessage =
+    explicitOwnership ??
+    emailMatchesCurrentUser ??
+    roleMatchesCurrentUser ??
+    false;
 
   return {
     id: message.id ?? message.messageId ?? crypto.randomUUID(),

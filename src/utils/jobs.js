@@ -17,6 +17,12 @@ const normalizeSkills = (skills) => {
 
 export const mapJobFromApi = (job) => ({
   id: job.id ?? job.jobId ?? crypto.randomUUID(),
+  chatRoomId:
+    job.chatRoomId ??
+    job.chatId ??
+    job.chat?.id ??
+    job.chat?.chatRoomId ??
+    null,
   applicationId:
     job.applicationId ??
     job.appliedApplicationId ??
@@ -53,6 +59,12 @@ export const mapJobFromApi = (job) => ({
 
 export const mapApplicationFromApi = (application) => ({
   id: application.id ?? application.applicationId ?? crypto.randomUUID(),
+  chatRoomId:
+    application.chatRoomId ??
+    application.chatId ??
+    application.chat?.id ??
+    application.chat?.chatRoomId ??
+    null,
   candidateId: application.candidateId ?? application.candidate?.id ?? application.userId ?? null,
   candidateName:
     application.candidateName ??

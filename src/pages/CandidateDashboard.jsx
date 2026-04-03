@@ -49,6 +49,25 @@ const getResponseMessage = (payload) =>
   payload?.result?.message ??
   '';
 
+const getAppliedJobsStorageKey = (email) => `candidate-applied-jobs:${email || 'default'}`;
+
+const readAppliedJobsCache = (email) => {
+  try {
+    const storedValue = localStorage.getItem(getAppliedJobsStorageKey(email));
+    return storedValue ? JSON.parse(storedValue) : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeAppliedJobsCache = (email, value) => {
+  try {
+    localStorage.setItem(getAppliedJobsStorageKey(email), JSON.stringify(value));
+  } catch {
+    // Ignore storage write failures and keep the in-memory state working.
+  }
+};
+
 const CandidateDashboard = () => {
   const navigate = useNavigate();
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -130,7 +149,22 @@ const CandidateDashboard = () => {
       }
 
       const jobList = Array.isArray(data) ? data : data.jobs ?? [];
-      setJobs(jobList.map(mapJobFromApi));
+      const cachedAppliedJobs = readAppliedJobsCache(userEmail);
+      setJobs(
+        jobList.map(mapJobFromApi).map((job) => {
+          const cachedJob = cachedAppliedJobs[job.id];
+
+          if (!cachedJob) {
+            return job;
+          }
+
+          return {
+            ...job,
+            applied: job.applied || Boolean(cachedJob.applied),
+            applicationId: job.applicationId ?? cachedJob.applicationId ?? null,
+          };
+        })
+      );
     } catch (loadError) {
       setError(loadError.message || 'Unable to load jobs.');
       setJobs([]);
@@ -205,6 +239,17 @@ const CandidateDashboard = () => {
     setCoverLetter('');
   };
 
+  const cacheAppliedJob = (jobId, applicationId = null) => {
+    const currentCache = readAppliedJobsCache(userEmail);
+    writeAppliedJobsCache(userEmail, {
+      ...currentCache,
+      [jobId]: {
+        applied: true,
+        applicationId: applicationId ?? currentCache[jobId]?.applicationId ?? null,
+      },
+    });
+  };
+
   const openChatPage = (job) => {
     setError('');
     navigate('/candidate-chat', {
@@ -253,17 +298,21 @@ const CandidateDashboard = () => {
               normalizedMessage.includes('exists') ||
               normalizedMessage.includes('applied')))
         ) {
+          const resolvedApplicationId =
+            data.applicationId ??
+            data.id ??
+            data.application?.id ??
+            applyModalJob.applicationId ??
+            null;
+
+          cacheAppliedJob(applyModalJob.id, resolvedApplicationId);
           setJobs((currentJobs) =>
             currentJobs.map((job) =>
               job.id === applyModalJob.id
                 ? {
                     ...job,
                     applied: true,
-                    applicationId:
-                      data.applicationId ??
-                      data.id ??
-                      data.application?.id ??
-                      job.applicationId,
+                    applicationId: resolvedApplicationId ?? job.applicationId,
                   }
                 : job
             )
@@ -276,17 +325,21 @@ const CandidateDashboard = () => {
         throw new Error(responseMessage || 'Unable to apply for this job.');
       }
 
+      const resolvedApplicationId =
+        data.applicationId ??
+        data.id ??
+        data.application?.id ??
+        applyModalJob.applicationId ??
+        null;
+
+      cacheAppliedJob(applyModalJob.id, resolvedApplicationId);
       setJobs((currentJobs) =>
         currentJobs.map((job) =>
           job.id === applyModalJob.id
             ? {
                 ...job,
                 applied: true,
-                applicationId:
-                  data.applicationId ??
-                  data.id ??
-                  data.application?.id ??
-                  job.applicationId,
+                applicationId: resolvedApplicationId ?? job.applicationId,
               }
             : job
         )

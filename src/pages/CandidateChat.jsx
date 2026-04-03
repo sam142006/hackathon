@@ -22,18 +22,26 @@ const CandidateChat = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const messagesEndRef = useRef(null);
+  const initialChatRoomId = location.state?.chatRoomId ?? null;
   const targetId = location.state?.targetId ?? location.state?.jobId ?? location.state?.applicationId ?? null;
+  const fallbackTargetId =
+    location.state?.fallbackTargetId ??
+    location.state?.applicationId ??
+    location.state?.jobId ??
+    null;
   const currentRole = localStorage.getItem('userRole') || '';
   const backPath =
     location.state?.backPath ??
     (currentRole.toUpperCase() === 'RECRUITER' ? '/recruiter-dashboard' : '/candidate-dashboard');
   const userEmail = localStorage.getItem('userEmail') || '';
 
-  const [chatRoomId, setChatRoomId] = useState(null);
+  const [chatRoomId, setChatRoomId] = useState(initialChatRoomId);
   const [applicationId, setApplicationId] = useState(location.state?.applicationId ?? null);
   const [jobTitle, setJobTitle] = useState(location.state?.jobTitle ?? 'Recruiter Chat');
   const [company, setCompany] = useState(location.state?.company ?? 'SmartHire');
-  const [candidateName, setCandidateName] = useState(localStorage.getItem('userName') || 'Candidate');
+  const [candidateName, setCandidateName] = useState(
+    location.state?.candidateName ?? localStorage.getItem('userName') ?? 'Candidate'
+  );
   const [recruiterName, setRecruiterName] = useState('Recruiter');
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
@@ -94,11 +102,27 @@ const CandidateChat = () => {
     }
 
     const messageList = Array.isArray(data) ? data : data.messages ?? [];
-    setMessages(messageList.map((item) => mapChatMessageFromApi(item, userEmail)));
+    setMessages(messageList.map((item) => mapChatMessageFromApi(item, userEmail, currentRole)));
   };
 
   useEffect(() => {
     const bootstrapChat = async () => {
+      if (initialChatRoomId) {
+        setLoading(true);
+        setError('');
+
+        try {
+          await loadMessages(initialChatRoomId);
+        } catch (chatError) {
+          setError(chatError.message || 'Unable to load chat history.');
+          setMessages([]);
+        } finally {
+          setLoading(false);
+        }
+
+        return;
+      }
+
       if (!targetId) {
         setLoading(false);
         setError('Job context is missing for this chat. Open chat from a job card.');
@@ -109,31 +133,51 @@ const CandidateChat = () => {
       setError('');
 
       try {
-        const response = await withAuth((token) => initializeChat(token, targetId));
+        const candidateTargets = [targetId, fallbackTargetId].filter(Boolean);
+        const uniqueTargets = [...new Set(candidateTargets)];
+        let initialized = false;
+        let lastErrorMessage = 'Unable to start chat.';
 
-        if (!response) {
-          return;
+        for (const currentTarget of uniqueTargets) {
+          const response = await withAuth((token) => initializeChat(token, currentTarget));
+
+          if (!response) {
+            return;
+          }
+
+          const data = await parseResponseBody(response);
+
+          if (!response.ok) {
+            lastErrorMessage = data.message || lastErrorMessage;
+            continue;
+          }
+
+          const roomId = data.chatRoomId ?? data.chatId ?? data.id ?? null;
+
+          if (!roomId) {
+            lastErrorMessage = 'Chat room ID was not returned by the server.';
+            continue;
+          }
+
+          setApplicationId(data.applicationId ?? location.state?.applicationId ?? null);
+          setChatRoomId(roomId);
+          setJobTitle(data.jobTitle ?? location.state?.jobTitle ?? 'Recruiter Chat');
+          setCompany(data.company ?? location.state?.company ?? 'SmartHire');
+          setCandidateName(
+            data.candidateName ??
+              location.state?.candidateName ??
+              localStorage.getItem('userName') ??
+              'Candidate'
+          );
+          setRecruiterName(data.recruiterName ?? location.state?.recruiterName ?? 'Recruiter');
+          await loadMessages(roomId);
+          initialized = true;
+          break;
         }
 
-        const data = await parseResponseBody(response);
-
-        if (!response.ok) {
-          throw new Error(data.message || 'Unable to start chat.');
+        if (!initialized) {
+          throw new Error(lastErrorMessage);
         }
-
-        const roomId = data.chatRoomId ?? data.chatId ?? data.id ?? null;
-
-        if (!roomId) {
-          throw new Error('Chat room ID was not returned by the server.');
-        }
-
-        setApplicationId(data.applicationId ?? location.state?.applicationId ?? null);
-        setChatRoomId(roomId);
-        setJobTitle(data.jobTitle ?? location.state?.jobTitle ?? 'Recruiter Chat');
-        setCompany(data.company ?? location.state?.company ?? 'SmartHire');
-        setCandidateName(data.candidateName ?? localStorage.getItem('userName') ?? 'Candidate');
-        setRecruiterName(data.recruiterName ?? 'Recruiter');
-        await loadMessages(roomId);
       } catch (chatError) {
         setError(chatError.message || 'Unable to start chat.');
         setMessages([]);
@@ -143,7 +187,7 @@ const CandidateChat = () => {
     };
 
     bootstrapChat();
-  }, [targetId]);
+  }, [initialChatRoomId, targetId, fallbackTargetId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -189,9 +233,9 @@ const CandidateChat = () => {
       }
 
       const savedMessage = data.message ?? data.data ?? data;
-      setMessages((currentMessages) => [
+        setMessages((currentMessages) => [
         ...currentMessages.filter((item) => item.id !== optimisticMessage.id),
-        mapChatMessageFromApi(savedMessage, userEmail),
+        mapChatMessageFromApi(savedMessage, userEmail, currentRole),
       ]);
     } catch (sendError) {
       setMessages((currentMessages) =>

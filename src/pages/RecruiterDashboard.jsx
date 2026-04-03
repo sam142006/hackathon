@@ -591,11 +591,15 @@ const RecruiterDashboard = () => {
                                   onClick={() =>
                                     navigate('/recruiter-chat', {
                                       state: {
-                                        targetId: application.id,
+                                        targetId: selectedJobId,
+                                        fallbackTargetId: application.id,
                                         applicationId: application.id,
+                                        chatRoomId: application.chatRoomId,
                                         jobId: selectedJobId,
                                         jobTitle: job.title,
                                         company: job.company,
+                                        candidateName: application.candidateName,
+                                        recruiterName: userName,
                                         backPath: '/recruiter-dashboard',
                                       },
                                     })
