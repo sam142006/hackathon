@@ -77,11 +77,7 @@ export const createRecruiterJob = (token, payload) =>
     body: JSON.stringify(payload),
   });
 
-export const getRecruiterJobs = (token) =>
-  apiRequest('/api/recruiter/jobs', {
-    method: 'GET',
-    token,
-  });
+
 
 export const getJobApplications = (token, jobId) =>
   apiRequest(`/api/recruiter/jobs/${jobId}/applications`, {
