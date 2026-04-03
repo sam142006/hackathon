@@ -317,6 +317,28 @@ const MockInterview = () => {
     }
   };
 
+  const handleExit = async () => {
+    const shouldTryEndingSession = sessionStarted || interviewCompleted || isInterviewComplete;
+
+    if (shouldTryEndingSession) {
+      setLoadingAction('exit');
+
+      withAuth((token) => endInterviewSession(token))
+        .then(async (response) => {
+          if (!response) {
+            return;
+          }
+
+          if (response.ok) {
+            resetInterviewState('');
+          }
+        })
+        .catch(() => {});
+    }
+
+    navigate('/candidate-dashboard', { replace: true });
+  };
+
   const progressPercent =
     totalQuestions > 0 && questionNumber > 0
       ? Math.min(100, Math.round((questionNumber / totalQuestions) * 100))
@@ -340,11 +362,12 @@ const MockInterview = () => {
               </p>
             </div>
             <button
-              onClick={() => navigate('/candidate-dashboard')}
-              className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition"
+              onClick={handleExit}
+              disabled={loadingAction === 'exit'}
+              className="px-5 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="inline-flex items-center gap-2">
-                <FaArrowLeft />
+                {loadingAction === 'exit' ? <FaSpinner className="animate-spin" /> : <FaArrowLeft />}
                 Exit
               </span>
             </button>

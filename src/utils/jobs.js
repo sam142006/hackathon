@@ -17,6 +17,18 @@ const normalizeSkills = (skills) => {
 
 export const mapJobFromApi = (job) => ({
   id: job.id ?? job.jobId ?? crypto.randomUUID(),
+  applicationId:
+    job.applicationId ??
+    job.appliedApplicationId ??
+    job.application?.id ??
+    job.jobApplicationId ??
+    job.application?.applicationId ??
+    null,
+  applicationStatus:
+    job.applicationStatus ??
+    job.application?.status ??
+    job.appliedStatus ??
+    '',
   title: job.title ?? 'Untitled Role',
   company: job.companyName ?? job.company ?? 'SmartHire',
   description: job.description ?? '',
@@ -27,7 +39,16 @@ export const mapJobFromApi = (job) => ({
   status: job.status ?? 'Active',
   applicants: job.applicantsCount ?? job.applicants ?? 0,
   postedDate: job.postedDate ?? job.createdAt ?? '',
-  applied: Boolean(job.applied),
+  applied: Boolean(
+    job.applied ??
+      job.alreadyApplied ??
+      job.hasApplied ??
+      job.applicationId ??
+      job.appliedApplicationId ??
+      job.application?.id ??
+      job.application?.applicationId ??
+      job.applicationStatus
+  ),
 });
 
 export const mapApplicationFromApi = (application) => ({
@@ -77,7 +98,11 @@ export const createRecruiterJob = (token, payload) =>
     body: JSON.stringify(payload),
   });
 
-
+export const getRecruiterJobs = (token) =>
+  apiRequest('/api/recruiter/jobs', {
+    method: 'GET',
+    token,
+  });
 
 export const getJobApplications = (token, jobId) =>
   apiRequest(`/api/recruiter/jobs/${jobId}/applications`, {

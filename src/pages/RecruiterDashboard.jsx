@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FaBell,
   FaBriefcase,
   FaBuilding,
   FaCalendarAlt,
@@ -15,7 +14,6 @@ import {
   FaMoneyBillWave,
   FaPlus,
   FaRocket,
-  FaSearch,
   FaSpinner,
   FaThLarge,
   FaTimes,
@@ -390,14 +388,6 @@ const RecruiterDashboard = () => {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <div className="relative">
-              <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input type="text" placeholder="Search jobs..." value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 w-64" />
-            </div>
-            <button className="relative">
-              <FaBell className="text-gray-600 text-xl" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">3</span>
-            </button>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-r from-teal-500 to-green-500 rounded-full flex items-center justify-center text-white text-sm">{userAvatar}</div>
               <div className="hidden md:block">

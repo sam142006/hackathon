@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FaBell,
   FaBookmark,
   FaBriefcase,
   FaBuilding,
   FaCalendarAlt,
   FaChartLine,
   FaCode,
+  FaComments,
   FaEnvelope,
   FaEye,
   FaFileAlt,
@@ -18,7 +18,6 @@ import {
   FaMapMarkerAlt,
   FaRegHeart,
   FaRocket,
-  FaSearch,
   FaSpinner,
   FaStar,
   FaTimes,
@@ -41,6 +40,14 @@ const parseResponseBody = async (response) => {
     return { message: text };
   }
 };
+
+const getResponseMessage = (payload) =>
+  payload?.message ??
+  payload?.error ??
+  payload?.details ??
+  payload?.data?.message ??
+  payload?.result?.message ??
+  '';
 
 const CandidateDashboard = () => {
   const navigate = useNavigate();
@@ -65,13 +72,10 @@ const CandidateDashboard = () => {
   const profile = {
     name: userName,
     email: userEmail,
-    phone: '+91 98765 43210',
     location: 'Bangalore, India',
     title: 'Software Professional',
     bio: 'Building a stronger profile and applying to roles that match core skills and growth goals.',
     skills: ['React.js', 'Node.js', 'TypeScript', 'Python', 'AWS', 'Docker', 'MongoDB', 'Tailwind CSS'],
-    certifications: ['AWS Certified Developer', 'Meta Frontend Developer', 'Google Cloud Associate'],
-    languages: ['English (Fluent)', 'Hindi (Native)', 'Spanish (Basic)'],
     experienceHistory: [
       {
         company: 'Tech Solutions Inc.',
@@ -122,7 +126,7 @@ const CandidateDashboard = () => {
       const data = await parseResponseBody(response);
 
       if (!response.ok) {
-        throw new Error(data.message || 'Unable to load jobs.');
+        throw new Error(getResponseMessage(data) || 'Unable to load jobs.');
       }
 
       const jobList = Array.isArray(data) ? data : data.jobs ?? [];
@@ -149,15 +153,10 @@ const CandidateDashboard = () => {
         job.company.toLowerCase().includes(normalizedSearch) ||
         job.requiredSkills.some((skill) => skill.toLowerCase().includes(normalizedSearch));
 
-      const normalizedExperience = `${job.experience}`.toLowerCase();
       const normalizedTab = activeTab.toLowerCase();
 
       if (normalizedTab === 'remote') {
         return matchesSearch && job.location.toLowerCase().includes('remote');
-      }
-
-      if (normalizedTab === 'full-time') {
-        return matchesSearch;
       }
 
       if (normalizedTab === 'contract') {
@@ -168,7 +167,7 @@ const CandidateDashboard = () => {
         return matchesSearch && job.requiredSkills.length >= 3;
       }
 
-      return matchesSearch || normalizedExperience.includes(normalizedSearch);
+      return matchesSearch;
     });
   }, [activeTab, jobs, searchTerm]);
 
@@ -206,6 +205,24 @@ const CandidateDashboard = () => {
     setCoverLetter('');
   };
 
+  const openChatPage = (job) => {
+    if (!job.applicationId) {
+      setError('Chat is available once the jobs API returns your application ID for this role.');
+      setMessage('');
+      return;
+    }
+
+    setError('');
+    navigate('/candidate-chat', {
+      state: {
+        applicationId: job.applicationId,
+        jobId: job.id,
+        jobTitle: job.title,
+        company: job.company,
+      },
+    });
+  };
+
   const handleApply = async () => {
     if (!applyModalJob) {
       return;
@@ -229,17 +246,57 @@ const CandidateDashboard = () => {
       }
 
       const data = await parseResponseBody(response);
+      const responseMessage = getResponseMessage(data);
+      const normalizedMessage = responseMessage.toLowerCase();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Unable to apply for this job.');
+        if (
+          normalizedMessage.includes('already applied') ||
+          (response.status === 400 &&
+            (normalizedMessage.includes('already') ||
+              normalizedMessage.includes('duplicate') ||
+              normalizedMessage.includes('exists') ||
+              normalizedMessage.includes('applied')))
+        ) {
+          setJobs((currentJobs) =>
+            currentJobs.map((job) =>
+              job.id === applyModalJob.id
+                ? {
+                    ...job,
+                    applied: true,
+                    applicationId:
+                      data.applicationId ??
+                      data.id ??
+                      data.application?.id ??
+                      job.applicationId,
+                  }
+                : job
+            )
+          );
+          setMessage(responseMessage || `You have already applied for ${applyModalJob.title}.`);
+          closeApplyModal();
+          return;
+        }
+
+        throw new Error(responseMessage || 'Unable to apply for this job.');
       }
 
       setJobs((currentJobs) =>
         currentJobs.map((job) =>
-          job.id === applyModalJob.id ? { ...job, applied: true } : job
+          job.id === applyModalJob.id
+            ? {
+                ...job,
+                applied: true,
+                applicationId:
+                  data.applicationId ??
+                  data.id ??
+                  data.application?.id ??
+                  job.applicationId,
+              }
+            : job
         )
       );
-      setMessage(data.message || `Application submitted for ${applyModalJob.title}.`);
+      setMessage(responseMessage || `Application submitted for ${applyModalJob.title}.`);
       closeApplyModal();
     } catch (applyError) {
       setError(applyError.message || 'Unable to apply for this job.');
@@ -249,12 +306,13 @@ const CandidateDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-green-50 to-emerald-50">
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-green-50 to-emerald-50">
       <nav className="bg-white/80 backdrop-blur-md shadow-lg sticky top-0 z-50 border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
-              <div className="bg-gradient-to-r from-teal-500 to-green-500 p-2 rounded-xl shadow-lg transform hover:scale-105 transition">
+              <div className="bg-gradient-to-r from-teal-500 to-green-500 p-2 rounded-xl shadow-lg">
                 <FaRocket className="text-white text-xl" />
               </div>
               <div>
@@ -266,40 +324,18 @@ const CandidateDashboard = () => {
             </div>
 
             <div className="flex items-center space-x-4">
-              <div className="relative">
-                <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search jobs, companies..."
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 w-80 text-sm"
-                />
-              </div>
-
-              <button className="relative group">
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs rounded-full flex items-center justify-center animate-pulse">
-                  3
-                </div>
-                <FaBell className="text-gray-600 text-xl group-hover:text-teal-600 transition" />
-              </button>
-
-              <div className="flex items-center space-x-3 group cursor-pointer">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-r from-teal-500 to-green-500 rounded-full blur opacity-50 group-hover:opacity-100 transition" />
-                  <div className="relative w-10 h-10 bg-gradient-to-r from-teal-500 to-green-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
-                    {userAvatar}
-                  </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-teal-500 to-green-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
+                  {userAvatar}
                 </div>
                 <div className="hidden md:block">
                   <p className="text-sm font-semibold text-gray-800">{userName}</p>
                   <p className="text-xs text-gray-500">{userEmail}</p>
                 </div>
               </div>
-
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all transform hover:scale-105 text-sm font-medium"
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition text-sm font-medium"
               >
                 Logout
               </button>
@@ -310,12 +346,11 @@ const CandidateDashboard = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="relative bg-gradient-to-r from-teal-600 via-green-600 to-emerald-600 rounded-3xl shadow-2xl p-8 mb-8 text-white overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full -mr-32 -mt-32 animate-pulse" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-10 rounded-full -ml-24 -mb-24 animate-pulse" />
-
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full -mr-32 -mt-32" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-10 rounded-full -ml-24 -mb-24" />
           <div className="relative z-10">
             <div className="flex items-center space-x-3 mb-4">
-              <div className="bg-white/20 backdrop-blur rounded-full p-2">
+              <div className="bg-white/20 rounded-full p-2">
                 <FaStar className="text-2xl" />
               </div>
               <h1 className="text-4xl font-bold">
@@ -330,86 +365,37 @@ const CandidateDashboard = () => {
               Fresh opportunities are loaded from the live API for you. Browse, filter, and apply
               with a tailored cover letter.
             </p>
-
-            <div className="flex flex-wrap gap-3">
-              <button className="px-6 py-2 bg-white text-teal-600 rounded-xl font-semibold hover:shadow-lg transition flex items-center gap-2">
-                <FaChartLine /> View Analytics
-              </button>
-              <button className="px-6 py-2 bg-white/20 backdrop-blur rounded-xl font-semibold hover:bg-white/30 transition flex items-center gap-2">
-                <FaFileAlt /> Resume Builder
-              </button>
-              <button
-                onClick={() => navigate('/mock-interview')}
-                className="px-6 py-2 bg-white/20 backdrop-blur rounded-xl font-semibold hover:bg-white/30 transition flex items-center gap-2"
-              >
-                <FaFileAlt /> Start Mock Interview
-              </button>
+            
+              
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="group bg-white rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105 cursor-pointer">
-            <div className="flex items-center justify-between mb-4">
-              <div className="bg-gradient-to-br from-teal-500 to-green-500 p-3 rounded-2xl shadow-lg group-hover:scale-110 transition">
-                <FaBriefcase className="text-2xl text-white" />
+          {[
+            { label: 'Jobs Applied', value: stats.jobsApplied, icon: FaBriefcase, color: 'from-teal-500 to-green-500' },
+            { label: 'Skill Matches', value: stats.savedJobs, icon: FaBookmark, color: 'from-blue-500 to-cyan-500' },
+            { label: 'Interview Leads', value: stats.interviews, icon: FaCalendarAlt, color: 'from-green-500 to-emerald-500' },
+            { label: 'Apply Rate', value: stats.applicationSuccess, icon: FaChartLine, color: 'from-purple-500 to-pink-500' },
+          ].map((item) => (
+            <div key={item.label} className="bg-white rounded-2xl shadow-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className={`bg-gradient-to-br ${item.color} p-3 rounded-2xl shadow-lg`}>
+                  <item.icon className="text-2xl text-white" />
+                </div>
+                <span className="text-3xl font-bold text-gray-800">{item.value}</span>
               </div>
-              <span className="text-3xl font-bold bg-gradient-to-r from-teal-600 to-green-600 bg-clip-text text-transparent">
-                {stats.jobsApplied}
-              </span>
+              <h3 className="text-gray-800 font-bold text-lg mb-1">{item.label}</h3>
+              <p className="text-gray-500 text-sm">Live dashboard stats</p>
             </div>
-            <h3 className="text-gray-800 font-bold text-lg mb-1">Jobs Applied</h3>
-            <p className="text-gray-500 text-sm">Live applications</p>
-          </div>
-
-          <div className="group bg-white rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105 cursor-pointer">
-            <div className="flex items-center justify-between mb-4">
-              <div className="bg-gradient-to-br from-blue-500 to-cyan-500 p-3 rounded-2xl shadow-lg group-hover:scale-110 transition">
-                <FaBookmark className="text-2xl text-white" />
-              </div>
-              <span className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
-                {stats.savedJobs}
-              </span>
-            </div>
-            <h3 className="text-gray-800 font-bold text-lg mb-1">Skill Matches</h3>
-            <p className="text-gray-500 text-sm">Roles with broad skill overlap</p>
-          </div>
-
-          <div className="group bg-white rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105 cursor-pointer">
-            <div className="flex items-center justify-between mb-4">
-              <div className="bg-gradient-to-br from-green-500 to-emerald-500 p-3 rounded-2xl shadow-lg group-hover:scale-110 transition">
-                <FaCalendarAlt className="text-2xl text-white" />
-              </div>
-              <span className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                {stats.interviews}
-              </span>
-            </div>
-            <h3 className="text-gray-800 font-bold text-lg mb-1">Interview Leads</h3>
-            <p className="text-gray-500 text-sm">Applied roles in progress</p>
-          </div>
-
-          <div className="group bg-white rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all duration-300 hover:scale-105 cursor-pointer">
-            <div className="flex items-center justify-between mb-4">
-              <div className="bg-gradient-to-br from-purple-500 to-pink-500 p-3 rounded-2xl shadow-lg group-hover:scale-110 transition">
-                <FaChartLine className="text-2xl text-white" />
-              </div>
-              <span className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                {stats.applicationSuccess}
-              </span>
-            </div>
-            <h3 className="text-gray-800 font-bold text-lg mb-1">Apply Rate</h3>
-            <p className="text-gray-500 text-sm">Based on loaded jobs</p>
-          </div>
+          ))}
         </div>
 
         <div className="bg-white rounded-3xl shadow-xl p-6 mb-8">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="flex items-center gap-5">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-teal-500 to-green-500 rounded-full blur opacity-50" />
-                <div className="relative w-20 h-20 bg-gradient-to-r from-teal-500 to-green-500 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-xl">
-                  {userAvatar}
-                </div>
+              <div className="w-20 h-20 bg-gradient-to-r from-teal-500 to-green-500 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-xl">
+                {userAvatar}
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-gray-800">{userName}</h2>
@@ -422,36 +408,23 @@ const CandidateDashboard = () => {
                 </div>
               </div>
             </div>
-
             <div className="flex gap-3">
               <button
                 onClick={() => setShowProfileModal(true)}
-                className="px-5 py-2 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-xl hover:shadow-lg transition flex items-center gap-2"
+                className="px-5 py-2 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-xl flex items-center gap-2"
               >
                 <FaUserCircle /> Open Profile
               </button>
               <button
                 onClick={handleEditProfile}
-                className="px-5 py-2 border-2 border-teal-500 text-teal-600 rounded-xl hover:bg-teal-50 transition flex items-center gap-2"
+                className="px-5 py-2 border-2 border-teal-500 text-teal-600 rounded-xl flex items-center gap-2"
               >
                 <FaFileAlt /> Edit Profile
               </button>
             </div>
           </div>
 
-          <div className="border-t mt-6 pt-6">
-            <div className="flex flex-wrap gap-4">
-              <div className="flex items-center gap-2 text-gray-600 hover:text-teal-600 transition cursor-pointer">
-                <FaLinkedin className="text-xl" /> <span className="text-sm">linkedin.com/in/alexmorgan</span>
-              </div>
-              <div className="flex items-center gap-2 text-gray-600 hover:text-teal-600 transition cursor-pointer">
-                <FaGithub className="text-xl" /> <span className="text-sm">github.com/alexmorgan</span>
-              </div>
-              <div className="flex items-center gap-2 text-gray-600 hover:text-teal-600 transition cursor-pointer">
-                <FaGlobe className="text-xl" /> <span className="text-sm">alexmorgan.dev</span>
-              </div>
-            </div>
-          </div>
+          
         </div>
 
         <CandidateResumePanel />
@@ -461,14 +434,11 @@ const CandidateDashboard = () => {
             <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
               <FaCode className="text-teal-600" /> Top Skills
             </h3>
-            <button className="text-teal-600 text-sm hover:text-teal-700">+ Add Skills</button>
+            <button className="text-teal-600 text-sm">+ Add Skills</button>
           </div>
           <div className="flex flex-wrap gap-3">
             {profile.skills.slice(0, 8).map((skill) => (
-              <span
-                key={skill}
-                className="px-4 py-2 bg-white rounded-full text-gray-700 text-sm shadow-sm hover:shadow-md transition cursor-pointer hover:bg-teal-50 hover:text-teal-600"
-              >
+              <span key={skill} className="px-4 py-2 bg-white rounded-full text-gray-700 text-sm shadow-sm">
                 {skill}
               </span>
             ))}
@@ -497,9 +467,7 @@ const CandidateDashboard = () => {
         {(message || error) && (
           <div
             className={`mb-6 rounded-2xl px-4 py-3 text-sm ${
-              error
-                ? 'bg-red-50 border border-red-100 text-red-700'
-                : 'bg-green-50 border border-green-100 text-green-700'
+              error ? 'bg-red-50 border border-red-100 text-red-700' : 'bg-green-50 border border-green-100 text-green-700'
             }`}
           >
             {error || message}
@@ -520,10 +488,7 @@ const CandidateDashboard = () => {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {filteredJobs.map((job) => (
-              <div
-                key={job.id}
-                className="group bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden hover:scale-[1.01]"
-              >
+              <div key={job.id} className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all overflow-hidden">
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-4 gap-4">
                     <div className="flex items-center gap-3">
@@ -531,9 +496,7 @@ const CandidateDashboard = () => {
                         <FaBuilding />
                       </div>
                       <div>
-                        <h3 className="text-xl font-bold text-gray-800 group-hover:text-teal-600 transition">
-                          {job.title}
-                        </h3>
+                        <h3 className="text-xl font-bold text-gray-800">{job.title}</h3>
                         <p className="text-gray-500 text-sm flex items-center gap-1 mt-1">
                           <FaBuilding className="text-teal-400" /> {job.company}
                         </p>
@@ -570,9 +533,20 @@ const CandidateDashboard = () => {
                   </div>
 
                   <div className="flex justify-between items-center pt-4 border-t">
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <FaEye className="text-teal-400" />
-                      <span>{job.applicants} applicants</span>
+                    <div className="flex items-center gap-3 text-xs text-gray-500">
+                      <span className="flex items-center gap-2">
+                        <FaEye className="text-teal-400" />
+                        <span>{job.applicants} applicants</span>
+                      </span>
+                      {job.applied && (
+                        <button
+                          onClick={() => openChatPage(job)}
+                          className="inline-flex items-center gap-2 rounded-full border border-teal-100 bg-teal-50 px-3 py-1 text-teal-700 hover:bg-teal-100 transition"
+                        >
+                          <FaComments />
+                          Chat
+                        </button>
+                      )}
                     </div>
                     <button
                       onClick={() => openApplyModal(job)}
@@ -605,7 +579,6 @@ const CandidateDashboard = () => {
                 <FaTimes />
               </button>
             </div>
-
             <div className="p-6">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Cover Letter</label>
               <textarea
@@ -616,12 +589,8 @@ const CandidateDashboard = () => {
                 className="w-full rounded-2xl border border-gray-200 p-4 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
               />
             </div>
-
             <div className="p-6 border-t border-gray-100 flex justify-end gap-3">
-              <button
-                onClick={closeApplyModal}
-                className="px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-50 transition"
-              >
+              <button onClick={closeApplyModal} className="px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-50 transition">
                 Cancel
               </button>
               <button
@@ -643,15 +612,12 @@ const CandidateDashboard = () => {
             <div className="bg-gradient-to-r from-teal-600 to-green-600 p-6 rounded-t-3xl text-white">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <div className="bg-white/20 backdrop-blur p-3 rounded-full">
+                  <div className="bg-white/20 p-3 rounded-full">
                     <FaUserCircle className="text-2xl" />
                   </div>
                   <h2 className="text-2xl font-bold">Profile Overview</h2>
                 </div>
-                <button
-                  onClick={() => setShowProfileModal(false)}
-                  className="hover:bg-white/20 p-2 rounded-full transition"
-                >
+                <button onClick={() => setShowProfileModal(false)} className="hover:bg-white/20 p-2 rounded-full transition">
                   <FaTimes className="text-xl" />
                 </button>
               </div>
@@ -687,9 +653,7 @@ const CandidateDashboard = () => {
                   {profile.experienceHistory.map((exp) => (
                     <div key={`${exp.company}-${exp.period}`} className="border-l-4 border-teal-500 pl-4">
                       <p className="font-semibold text-gray-800">{exp.position}</p>
-                      <p className="text-teal-600 text-sm">
-                        {exp.company} | {exp.period}
-                      </p>
+                      <p className="text-teal-600 text-sm">{exp.company} | {exp.period}</p>
                       <p className="text-gray-500 text-sm mt-1">{exp.description}</p>
                     </div>
                   ))}
@@ -709,23 +673,17 @@ const CandidateDashboard = () => {
             </div>
 
             <div className="border-t p-6 bg-gray-50 rounded-b-3xl flex justify-end gap-3">
-              <button
-                onClick={() => setShowProfileModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-100 transition"
-              >
+              <button onClick={() => setShowProfileModal(false)} className="px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-100 transition">
                 Close
               </button>
-              <button
-                onClick={handleEditProfile}
-                className="px-4 py-2 bg-teal-500 text-white rounded-xl hover:bg-teal-600 transition"
-              >
+              <button onClick={handleEditProfile} className="px-4 py-2 bg-teal-500 text-white rounded-xl hover:bg-teal-600 transition">
                 Edit Profile
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

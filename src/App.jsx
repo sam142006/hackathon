@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import RecruiterDashboard from './pages/RecruiterDashboard';
 import CandidateDashboard from './pages/CandidateDashboard';
 import MockInterview from './pages/MockInterview';
+import CandidateChat from './pages/CandidateChat';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
 
       <Route element={<ProtectedRoute allowedRoles={['CANDIDATE']} />}>
         <Route path="/candidate-dashboard" element={<CandidateDashboard />} />
+        <Route path="/candidate-chat" element={<CandidateChat />} />
         <Route path="/mock-interview" element={<MockInterview />} />
         <Route path="/candidate" element={<Navigate to="/candidate-dashboard" replace />} />
       </Route>
