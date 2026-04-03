@@ -26,7 +26,6 @@ import {
   downloadCandidateResume,
   getJobApplications,
   getRecruiterJobs,
-  getSkillGapRoadmap,
   mapApplicationFromApi,
   mapJobFromApi,
   toggleRecruiterJobStatus,
@@ -79,8 +78,6 @@ const RecruiterDashboard = () => {
   const [updatingJobId, setUpdatingJobId] = useState(null);
   const [updatingApplicationId, setUpdatingApplicationId] = useState(null);
   const [downloadingResumeId, setDownloadingResumeId] = useState(null);
-  const [skillGapLoadingId, setSkillGapLoadingId] = useState(null);
-  const [skillGapData, setSkillGapData] = useState(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [formData, setFormData] = useState(createInitialFormData);
@@ -330,46 +327,6 @@ const RecruiterDashboard = () => {
       setError(downloadError.message || 'Unable to download candidate resume.');
     } finally {
       setDownloadingResumeId(null);
-    }
-  };
-
-  const handleGenerateSkillGap = async (application) => {
-    if (!application.candidateId || !selectedJobId) {
-      setError('Candidate ID or job ID is missing for skill-gap generation.');
-      return;
-    }
-
-    setSkillGapLoadingId(application.id);
-    setSkillGapData(null);
-    setError('');
-    setMessage('');
-
-    try {
-      const response = await withAuth((token) =>
-        getSkillGapRoadmap(token, application.candidateId, selectedJobId)
-      );
-
-      if (!response) {
-        return;
-      }
-
-      const data = await parseResponseBody(response);
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Unable to generate skill-gap roadmap.');
-      }
-
-      setSkillGapData({
-        applicationId: application.id,
-        missingSkills: Array.isArray(data.missingSkills) ? data.missingSkills : [],
-        roadmap: data.roadmap ?? data.roadmapText ?? 'No roadmap available.',
-        learningResources: Array.isArray(data.learningResources) ? data.learningResources : [],
-      });
-      setMessage(`Skill-gap roadmap generated for ${application.candidateName}.`);
-    } catch (skillGapError) {
-      setError(skillGapError.message || 'Unable to generate skill-gap roadmap.');
-    } finally {
-      setSkillGapLoadingId(null);
     }
   };
 
