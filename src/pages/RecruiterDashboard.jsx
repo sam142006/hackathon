@@ -384,8 +384,8 @@ const RecruiterDashboard = () => {
               <FaRocket className="text-white text-xl" />
             </div>
             <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-teal-600 to-green-600 bg-clip-text text-transparent">RecruitPro</h1>
-              <p className="text-xs text-gray-500">Smart Hiring Platform</p>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-teal-600 to-green-600 bg-clip-text text-transparent">SmartHire</h1>
+              <p className="text-xs text-gray-500">Intelligent Hiring Platform</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
