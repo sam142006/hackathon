@@ -51,4 +51,12 @@ export const getChatHistory = (token, chatRoomId) =>
     token,
   });
 
-
+export const sendChatMessage = (token, applicationId, content) =>
+  apiRequest(`/api/chats/application/${applicationId}/messages`, {
+    method: 'POST',
+    token,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ content }),
+  });
