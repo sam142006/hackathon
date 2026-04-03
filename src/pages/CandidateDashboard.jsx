@@ -12,10 +12,10 @@ import {
   FaEye,
   FaMapSigns,
   FaMapMarkerAlt,
-  FaRocket,
   FaSpinner,
   FaStar,
 } from 'react-icons/fa';
+import BrandLogo from '../components/BrandLogo';
 import CandidateResumePanel from '../components/CandidateResumePanel';
 import { clearSession, getStoredToken } from '../utils/auth';
 import { applyForJob, getCandidateJobs, getSkillGapRoadmap, mapJobFromApi } from '../utils/jobs';
@@ -336,15 +336,7 @@ const CandidateDashboard = () => {
       <div className="min-h-screen bg-[#f4f7fb]">
         <nav className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 p-3 shadow-sm">
-                <FaRocket className="text-lg text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-slate-900">SmartHire</h1>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Candidate Workspace</p>
-              </div>
-            </div>
+            <BrandLogo subtitle="Candidate Workspace" />
 
             <div className="flex items-center gap-4">
               <div className="hidden items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 md:flex">

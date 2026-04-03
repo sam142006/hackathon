@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaUserCircle, FaSignOutAlt } from 'react-icons/fa';
 import { clearSession } from '../utils/auth';
+import BrandLogo from './BrandLogo';
 
 const Navbar = ({ title }) => {
   const navigate = useNavigate();
@@ -17,9 +18,7 @@ const Navbar = ({ title }) => {
       <div className="px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-teal-600 to-green-600 bg-clip-text text-transparent">
-              {title}
-            </h1>
+            <BrandLogo subtitle={title} />
           </div>
           
           <div className="flex items-center space-x-6">
