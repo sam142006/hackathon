@@ -1,6 +1,11 @@
 import { apiRequest } from './api';
 
-export const mapChatMessageFromApi = (message, currentUserEmail, currentUserRole = '') => {
+export const mapChatMessageFromApi = (
+  message,
+  currentUserEmail,
+  currentUserRole = '',
+  currentUserName = ''
+) => {
   const senderEmail =
     message.senderEmail ??
     message.fromEmail ??
@@ -14,12 +19,17 @@ export const mapChatMessageFromApi = (message, currentUserEmail, currentUserRole
     '';
   const normalizedRole = senderRole.toUpperCase();
   const normalizedCurrentUserRole = currentUserRole.toUpperCase();
+  const senderName =
+    message.senderName ??
+    message.name ??
+    message.sender?.name ??
+    '';
+  const normalizedCurrentUserName = currentUserName.trim().toLowerCase();
+  const normalizedSenderName = senderName.trim().toLowerCase();
   const emailMatchesCurrentUser =
-    Boolean(
-      currentUserEmail &&
-        senderEmail &&
-        currentUserEmail.toLowerCase() === senderEmail.toLowerCase()
-    );
+    currentUserEmail && senderEmail
+      ? currentUserEmail.toLowerCase() === senderEmail.toLowerCase()
+      : null;
   const explicitOwnership =
     typeof message.isOwnMessage === 'boolean'
       ? message.isOwnMessage
@@ -32,10 +42,15 @@ export const mapChatMessageFromApi = (message, currentUserEmail, currentUserRole
     normalizedCurrentUserRole && normalizedRole
       ? normalizedCurrentUserRole === normalizedRole
       : null;
+  const nameMatchesCurrentUser =
+    normalizedCurrentUserName && normalizedSenderName
+      ? normalizedCurrentUserName === normalizedSenderName
+      : null;
   const isOwnMessage =
     explicitOwnership ??
     emailMatchesCurrentUser ??
     roleMatchesCurrentUser ??
+    nameMatchesCurrentUser ??
     false;
 
   return {
@@ -43,9 +58,7 @@ export const mapChatMessageFromApi = (message, currentUserEmail, currentUserRole
     content: message.content ?? message.message ?? '',
     createdAt: message.createdAt ?? message.timestamp ?? message.sentAt ?? '',
     senderName:
-      message.senderName ??
-      message.name ??
-      message.sender?.name ??
+      senderName ??
       (isOwnMessage ? 'You' : 'Recruiter'),
     senderRole,
     isOwnMessage,

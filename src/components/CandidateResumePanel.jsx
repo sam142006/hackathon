@@ -1,18 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  FaChartLine,
-  FaCloudDownloadAlt,
-  FaFileAlt,
-  FaPlay,
-  FaSearch,
-  FaSpinner,
-  FaUpload,
-} from 'react-icons/fa';
+import { FaChartLine, FaCloudDownloadAlt, FaFileAlt, FaSpinner, FaUpload } from 'react-icons/fa';
 import { clearSession, getStoredToken } from '../utils/auth';
 import {
   checkCandidateResumeExists,
-  checkResumeExists,
   downloadResume,
   getResumeAnalysis,
   uploadResume,
@@ -277,50 +268,6 @@ const CandidateResumePanel = () => {
     loadResumeOnMount();
   }, []);
 
-  const handleCheckResume = async () => {
-    const effectiveResumeId = getEffectiveResumeId();
-
-    if (!effectiveResumeId) {
-      return;
-    }
-
-    setLoading(true);
-    setLoadingAction('check');
-    setError('');
-
-    try {
-      const response = await withAuth((token) =>
-        checkResumeExists(token, effectiveResumeId)
-      );
-
-      if (!response) {
-        return;
-      }
-
-      const data = await parseResponseBody(response);
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Unable to check resume status.');
-      }
-
-      const exists = typeof data.exists === 'boolean' ? data.exists : true;
-
-      setResumeStatus({
-        resumeId: effectiveResumeId,
-        exists,
-        message: exists
-          ? data.message || `Resume ${effectiveResumeId} is available.`
-          : data.message || `Resume ${effectiveResumeId} was not found.`,
-      });
-    } catch (checkError) {
-      setResumeStatus(null);
-      setError(checkError.message || 'Unable to check resume status.');
-    } finally {
-      setLoading(false);
-      setLoadingAction('');
-    }
-  };
-
   const handleDownloadResume = async () => {
     const effectiveResumeId = getEffectiveResumeId();
 
@@ -413,20 +360,17 @@ const CandidateResumePanel = () => {
             Upload, verify, download, analyze your resume, and open your dedicated AI interview workspace.
           </p>
         </div>
-        <button
-          onClick={() => navigate('/mock-interview')}
-          className="px-5 py-2 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-xl hover:shadow-lg transition font-medium"
-        >
-          Open AI Interview
-        </button>
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          Resume status, analysis, and AI interview access are managed from this panel.
+        </div>
       </div>
 
-      <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50 via-white to-green-50 p-5">
+      <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-green-50 p-5">
         <div className="flex flex-col xl:flex-row gap-5">
           <div className="flex-1">
             <div className="flex items-start gap-3">
-              <div className="mt-1 rounded-2xl bg-white p-3 shadow-sm border border-teal-100">
-                <FaFileAlt className="text-lg text-teal-600" />
+              <div className="mt-1 rounded-2xl border border-emerald-100 bg-white p-3 shadow-sm">
+                <FaFileAlt className="text-lg text-emerald-600" />
               </div>
               <div className="w-full">
                 <p className="text-sm font-semibold text-gray-800">Resume Actions</p>
@@ -441,14 +385,14 @@ const CandidateResumePanel = () => {
                       type="file"
                       accept="application/pdf,.pdf"
                       onChange={handleFileChange}
-                      className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-xl file:border-0 file:bg-white file:px-4 file:py-2 file:font-medium file:text-teal-700 hover:file:bg-teal-100"
+                      className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-xl file:border-0 file:bg-white file:px-4 file:py-2 file:font-medium file:text-emerald-700 hover:file:bg-emerald-100"
                     />
                     <input
                       type="text"
                       value={resumeId}
                       onChange={(event) => setResumeId(event.target.value)}
                       placeholder="Resume ID"
-                      className="w-full sm:max-w-[180px] rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      className="w-full sm:max-w-[180px] rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
 
@@ -456,7 +400,7 @@ const CandidateResumePanel = () => {
                     <button
                       onClick={handleUploadResume}
                       disabled={loading}
-                      className="px-4 py-2 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-xl hover:shadow-lg transition flex items-center gap-2 disabled:opacity-50"
+                      className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl hover:shadow-lg transition flex items-center gap-2 disabled:opacity-50"
                     >
                       {loadingAction === 'upload' ? (
                         <FaSpinner className="animate-spin" />
@@ -464,18 +408,6 @@ const CandidateResumePanel = () => {
                         <FaUpload />
                       )}
                       Upload Resume
-                    </button>
-                    <button
-                      onClick={handleCheckResume}
-                      disabled={loading}
-                      className="px-4 py-2 border border-teal-200 text-teal-700 rounded-xl hover:bg-white transition flex items-center gap-2 disabled:opacity-50"
-                    >
-                      {loadingAction === 'check' ? (
-                        <FaSpinner className="animate-spin" />
-                      ) : (
-                        <FaSearch />
-                      )}
-                      Check Resume Exists
                     </button>
                     <button
                       onClick={handleDownloadResume}
@@ -492,7 +424,7 @@ const CandidateResumePanel = () => {
                     <button
                       onClick={handleGetAnalysis}
                       disabled={loading}
-                      className="px-4 py-2 border border-teal-200 text-teal-700 rounded-xl hover:bg-white transition flex items-center gap-2 disabled:opacity-50"
+                      className="px-4 py-2 border border-emerald-200 text-emerald-700 rounded-xl hover:bg-white transition flex items-center gap-2 disabled:opacity-50"
                     >
                       {loadingAction === 'analysis' ? (
                         <FaSpinner className="animate-spin" />
@@ -504,10 +436,9 @@ const CandidateResumePanel = () => {
                     <button
                       onClick={() => navigate('/mock-interview', { state: { autoStart: true } })}
                       disabled={loading}
-                      className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl hover:bg-white transition flex items-center gap-2 disabled:opacity-50"
+                      className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl hover:shadow-lg transition flex items-center gap-2 disabled:opacity-50"
                     >
-                      <FaPlay />
-                      Open & Start AI Interview
+                      Start AI Interview
                     </button>
                   </div>
                 </div>
@@ -533,7 +464,7 @@ const CandidateResumePanel = () => {
             </div>
           </div>
 
-          <div className="min-w-[220px] rounded-2xl bg-white border border-teal-100 shadow-sm px-5 py-4">
+          <div className="min-w-[220px] rounded-2xl bg-white border border-emerald-100 shadow-sm px-5 py-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-600">
               Status
             </p>

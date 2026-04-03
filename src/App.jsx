@@ -6,6 +6,7 @@ import RecruiterDashboard from './pages/RecruiterDashboard';
 import CandidateDashboard from './pages/CandidateDashboard';
 import MockInterview from './pages/MockInterview';
 import CandidateChat from './pages/CandidateChat';
+import RecruiterApplicants from './pages/RecruiterApplicants';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
 
       <Route element={<ProtectedRoute allowedRoles={['RECRUITER']} />}>
         <Route path="/recruiter-dashboard" element={<RecruiterDashboard />} />
+        <Route path="/recruiter/jobs/:jobId/applicants" element={<RecruiterApplicants />} />
         <Route path="/recruiter-chat" element={<CandidateChat />} />
         <Route path="/recruiter" element={<Navigate to="/recruiter-dashboard" replace />} />
       </Route>

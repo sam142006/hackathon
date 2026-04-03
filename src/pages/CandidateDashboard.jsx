@@ -6,23 +6,15 @@ import {
   FaBuilding,
   FaCalendarAlt,
   FaChartLine,
-  FaCode,
   FaComments,
+  FaCompass,
   FaEnvelope,
   FaEye,
-  FaFileAlt,
-  FaGithub,
-  FaGlobe,
-  FaGraduationCap,
   FaMapSigns,
-  FaLinkedin,
   FaMapMarkerAlt,
-  FaRegHeart,
   FaRocket,
   FaSpinner,
   FaStar,
-  FaTimes,
-  FaUserCircle,
 } from 'react-icons/fa';
 import CandidateResumePanel from '../components/CandidateResumePanel';
 import { clearSession, getStoredToken } from '../utils/auth';
@@ -30,14 +22,10 @@ import { applyForJob, getCandidateJobs, getSkillGapRoadmap, mapJobFromApi } from
 
 const parseResponseBody = async (response) => {
   const text = await response.text();
-
-  if (!text) {
-    return {};
-  }
-
+  if (!text) return {};
   try {
     return JSON.parse(text);
-  } catch (error) {
+  } catch {
     return { message: text };
   }
 };
@@ -49,6 +37,21 @@ const getResponseMessage = (payload) =>
   payload?.data?.message ??
   payload?.result?.message ??
   '';
+
+const getSkillGapErrorMessage = (payload) => {
+  const message = getResponseMessage(payload);
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes('no static resource') ||
+    normalized.includes('500') ||
+    normalized.includes('internal server error')
+  ) {
+    return 'Skill-gap roadmap API is failing on the server right now. Please try again later.';
+  }
+
+  return message || 'Unable to generate skill-gap roadmap.';
+};
 
 const getAppliedJobsStorageKey = (email) => `candidate-applied-jobs:${email || 'default'}`;
 
@@ -71,7 +74,6 @@ const writeAppliedJobsCache = (email, value) => {
 
 const CandidateDashboard = () => {
   const navigate = useNavigate();
-  const [showProfileModal, setShowProfileModal] = useState(false);
   const [activeTab, setActiveTab] = useState('all jobs');
   const [searchTerm, setSearchTerm] = useState('');
   const [jobs, setJobs] = useState([]);
@@ -92,76 +94,36 @@ const CandidateDashboard = () => {
     .map((name) => name[0])
     .join('');
 
-  const profile = {
-    name: userName,
-    email: userEmail,
-    location: 'Bangalore, India',
-    title: 'Software Professional',
-    bio: 'Building a stronger profile and applying to roles that match core skills and growth goals.',
-    skills: ['React.js', 'Node.js', 'TypeScript', 'Python', 'AWS', 'Docker', 'MongoDB', 'Tailwind CSS'],
-    experienceHistory: [
-      {
-        company: 'Tech Solutions Inc.',
-        position: 'Senior Full Stack Developer',
-        period: '2022 - Present',
-        description: 'Leading frontend initiatives and improving delivery quality across web applications.',
-      },
-      {
-        company: 'Digital Innovations',
-        position: 'Frontend Developer',
-        period: '2019 - 2022',
-        description: 'Developed responsive product experiences and collaborated closely with design and backend teams.',
-      },
-    ],
-  };
-
   const withAuth = async (request) => {
     const token = getStoredToken();
-
     if (!token) {
       clearSession();
       navigate('/', { replace: true });
       return null;
     }
-
     const response = await request(token);
-
     if (response.status === 401 || response.status === 403) {
       clearSession();
       navigate('/', { replace: true });
       return null;
     }
-
     return response;
   };
 
   const loadJobs = async () => {
     setLoading(true);
     setError('');
-
     try {
       const response = await withAuth((token) => getCandidateJobs(token));
-
-      if (!response) {
-        return;
-      }
-
+      if (!response) return;
       const data = await parseResponseBody(response);
-
-      if (!response.ok) {
-        throw new Error(getResponseMessage(data) || 'Unable to load jobs.');
-      }
-
+      if (!response.ok) throw new Error(getResponseMessage(data) || 'Unable to load jobs.');
       const jobList = Array.isArray(data) ? data : data.jobs ?? [];
       const cachedAppliedJobs = readAppliedJobsCache(userEmail);
       setJobs(
         jobList.map(mapJobFromApi).map((job) => {
           const cachedJob = cachedAppliedJobs[job.id];
-
-          if (!cachedJob) {
-            return job;
-          }
-
+          if (!cachedJob) return job;
           return {
             ...job,
             applied: job.applied || Boolean(cachedJob.applied),
@@ -183,28 +145,22 @@ const CandidateDashboard = () => {
 
   const filteredJobs = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
-
     return jobs.filter((job) => {
       const matchesSearch =
         !normalizedSearch ||
         job.title.toLowerCase().includes(normalizedSearch) ||
         job.company.toLowerCase().includes(normalizedSearch) ||
         job.requiredSkills.some((skill) => skill.toLowerCase().includes(normalizedSearch));
-
       const normalizedTab = activeTab.toLowerCase();
-
       if (normalizedTab === 'remote') {
         return matchesSearch && job.location.toLowerCase().includes('remote');
       }
-
       if (normalizedTab === 'contract') {
         return matchesSearch && job.description.toLowerCase().includes('contract');
       }
-
       if (normalizedTab === 'featured') {
         return matchesSearch && job.requiredSkills.length >= 3;
       }
-
       return matchesSearch;
     });
   }, [activeTab, jobs, searchTerm]);
@@ -212,7 +168,7 @@ const CandidateDashboard = () => {
   const stats = useMemo(
     () => ({
       jobsApplied: jobs.filter((job) => job.applied).length,
-      savedJobs: jobs.filter((job) => job.requiredSkills.length >= 4).length,
+      skillMatches: jobs.filter((job) => job.requiredSkills.length >= 4).length,
       interviews: jobs.filter((job) => job.applied).slice(0, 3).length,
       applicationSuccess:
         jobs.length > 0
@@ -225,10 +181,6 @@ const CandidateDashboard = () => {
   const handleLogout = () => {
     clearSession();
     navigate('/');
-  };
-
-  const handleEditProfile = () => {
-    setMessage('Profile editing can be connected when the profile API is available.');
   };
 
   const openApplyModal = (job) => {
@@ -249,27 +201,17 @@ const CandidateDashboard = () => {
       setMessage('');
       return;
     }
-
     setSkillGapLoadingJobId(job.id);
     setSkillGapData(null);
     setError('');
     setMessage('');
-
     try {
-      const response = await withAuth((token) =>
-        getSkillGapRoadmap(token, candidateId, job.id)
-      );
-
-      if (!response) {
-        return;
-      }
-
+      const response = await withAuth((token) => getSkillGapRoadmap(token, candidateId, job.id));
+      if (!response) return;
       const data = await parseResponseBody(response);
-
       if (!response.ok) {
-        throw new Error(getResponseMessage(data) || 'Unable to generate skill-gap roadmap.');
+        throw new Error(getSkillGapErrorMessage(data));
       }
-
       setSkillGapData({
         jobId: job.id,
         missingSkills: Array.isArray(data.missingSkills) ? data.missingSkills : [],
@@ -309,31 +251,21 @@ const CandidateDashboard = () => {
   };
 
   const handleApply = async () => {
-    if (!applyModalJob) {
-      return;
-    }
-
+    if (!applyModalJob) return;
     if (!coverLetter.trim()) {
       setError('Please add a cover letter before applying.');
       return;
     }
-
     setApplying(true);
     setError('');
-
     try {
       const response = await withAuth((token) =>
         applyForJob(token, applyModalJob.id, coverLetter.trim())
       );
-
-      if (!response) {
-        return;
-      }
-
+      if (!response) return;
       const data = await parseResponseBody(response);
       const responseMessage = getResponseMessage(data);
       const normalizedMessage = responseMessage.toLowerCase();
-
       if (!response.ok) {
         if (
           normalizedMessage.includes('already applied') ||
@@ -349,7 +281,6 @@ const CandidateDashboard = () => {
             data.application?.id ??
             applyModalJob.applicationId ??
             null;
-
           cacheAppliedJob(applyModalJob.id, resolvedApplicationId);
           setJobs((currentJobs) =>
             currentJobs.map((job) =>
@@ -366,7 +297,6 @@ const CandidateDashboard = () => {
           closeApplyModal();
           return;
         }
-
         throw new Error(responseMessage || 'Unable to apply for this job.');
       }
 
@@ -400,455 +330,357 @@ const CandidateDashboard = () => {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-green-50 to-emerald-50">
-      <nav className="bg-white/80 backdrop-blur-md shadow-lg sticky top-0 z-50 border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <div className="bg-gradient-to-r from-teal-500 to-green-500 p-2 rounded-xl shadow-lg">
-                <FaRocket className="text-white text-xl" />
+      <div className="min-h-screen bg-[#f4f7fb]">
+        <nav className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 p-3 shadow-sm">
+                <FaRocket className="text-lg text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-teal-600 to-green-600 bg-clip-text text-transparent">
-                  CareerPath
-                </h1>
-                <p className="text-xs text-gray-500">Your Dream Job Awaits</p>
+                <h1 className="text-xl font-semibold text-slate-900">SmartHire</h1>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Candidate Workspace</p>
               </div>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-teal-500 to-green-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
+            <div className="flex items-center gap-4">
+              <div className="hidden items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 md:flex">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-sm font-semibold text-white">
                   {userAvatar}
                 </div>
-                <div className="hidden md:block">
-                  <p className="text-sm font-semibold text-gray-800">{userName}</p>
-                  <p className="text-xs text-gray-500">{userEmail}</p>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{userName}</p>
+                  <p className="text-xs text-slate-500">{userEmail}</p>
                 </div>
               </div>
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition text-sm font-medium"
+                className="rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-sm font-medium text-white transition hover:shadow-lg"
               >
                 Logout
               </button>
             </div>
           </div>
-        </div>
-      </nav>
+        </nav>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="relative bg-gradient-to-r from-teal-600 via-green-600 to-emerald-600 rounded-3xl shadow-2xl p-8 mb-8 text-white overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full -mr-32 -mt-32" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-10 rounded-full -ml-24 -mb-24" />
-          <div className="relative z-10">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="bg-white/20 rounded-full p-2">
-                <FaStar className="text-2xl" />
-              </div>
-              <h1 className="text-4xl font-bold">
-                Welcome back,{' '}
-                <span className="bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent">
-                  {userName.split(' ')[0]}
-                </span>
-                !
-              </h1>
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <section className="grid gap-6 lg:grid-cols-[1.45fr_0.95fr]">
+            <div className="rounded-[32px] bg-gradient-to-r from-emerald-600 via-teal-600 to-green-500 px-7 py-8 text-white shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">
+                Career Dashboard
+              </p>
+              <h2 className="mt-4 text-4xl font-semibold leading-tight">
+                Find stronger roles, apply faster, and stay interview-ready.
+              </h2>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-emerald-50">
+                Browse live openings, apply with a tailored cover letter, open recruiter chat after
+                applying, and generate a skill-gap roadmap whenever you want to prepare for a role.
+              </p>
             </div>
-            <p className="text-teal-100 text-lg mb-6">
-              Fresh opportunities are loaded from the live API for you. Browse, filter, and apply
-              with a tailored cover letter.
-            </p>
-            
-              
-            </div>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {[
-            { label: 'Jobs Applied', value: stats.jobsApplied, icon: FaBriefcase, color: 'from-teal-500 to-green-500' },
-            { label: 'Skill Matches', value: stats.savedJobs, icon: FaBookmark, color: 'from-blue-500 to-cyan-500' },
-            { label: 'Interview Leads', value: stats.interviews, icon: FaCalendarAlt, color: 'from-green-500 to-emerald-500' },
-            { label: 'Apply Rate', value: stats.applicationSuccess, icon: FaChartLine, color: 'from-purple-500 to-pink-500' },
-          ].map((item) => (
-            <div key={item.label} className="bg-white rounded-2xl shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className={`bg-gradient-to-br ${item.color} p-3 rounded-2xl shadow-lg`}>
-                  <item.icon className="text-2xl text-white" />
+            <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Profile Snapshot
+              </p>
+              <div className="mt-5 flex items-center gap-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-xl font-semibold text-emerald-700">
+                  {userAvatar}
                 </div>
-                <span className="text-3xl font-bold text-gray-800">{item.value}</span>
+                <div>
+                  <h3 className="text-xl font-semibold text-slate-900">{userName}</h3>
+                  <p className="mt-1 flex items-center gap-2 text-sm text-slate-500">
+                    <FaEnvelope className="text-emerald-600" />
+                    {userEmail}
+                  </p>
+                </div>
               </div>
-              <h3 className="text-gray-800 font-bold text-lg mb-1">{item.label}</h3>
-              <p className="text-gray-500 text-sm">Live dashboard stats</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="bg-white rounded-3xl shadow-xl p-6 mb-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div className="flex items-center gap-5">
-              <div className="w-20 h-20 bg-gradient-to-r from-teal-500 to-green-500 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-xl">
-                {userAvatar}
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-gray-800">{userName}</h2>
-                <p className="text-gray-500 flex items-center gap-2 mt-1">
-                  <FaEnvelope className="text-sm" /> {userEmail}
-                </p>
-                <div className="flex gap-2 mt-2">
-                  <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">Available for work</span>
-                  <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">Open to opportunities</span>
+              <div className="mt-6 grid gap-3">
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Focus</p>
+                  <p className="mt-2 text-sm font-medium text-slate-700">
+                    Full-stack and frontend roles with strong growth potential
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Actions</p>
+                  <p className="mt-2 text-sm font-medium text-slate-700">
+                    Apply, chat, analyze resume, and launch one dedicated AI interview flow
+                  </p>
                 </div>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowProfileModal(true)}
-                className="px-5 py-2 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-xl flex items-center gap-2"
-              >
-                <FaUserCircle /> Open Profile
-              </button>
-              <button
-                onClick={handleEditProfile}
-                className="px-5 py-2 border-2 border-teal-500 text-teal-600 rounded-xl flex items-center gap-2"
-              >
-                <FaFileAlt /> Edit Profile
-              </button>
-            </div>
-          </div>
+          </section>
 
-          
-        </div>
-
-        <CandidateResumePanel />
-
-        <div className="bg-gradient-to-r from-teal-50 to-green-50 rounded-3xl p-6 mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <FaCode className="text-teal-600" /> Top Skills
-            </h3>
-            <button className="text-teal-600 text-sm">+ Add Skills</button>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            {profile.skills.slice(0, 8).map((skill) => (
-              <span key={skill} className="px-4 py-2 bg-white rounded-full text-gray-700 text-sm shadow-sm">
-                {skill}
-              </span>
+          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: 'Jobs Applied', value: stats.jobsApplied, icon: FaBriefcase },
+              { label: 'Skill Matches', value: stats.skillMatches, icon: FaBookmark },
+              { label: 'Interview Leads', value: stats.interviews, icon: FaCalendarAlt },
+              { label: 'Apply Rate', value: stats.applicationSuccess, icon: FaChartLine },
+            ].map((item) => (
+              <div key={item.label} className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-700">
+                    <item.icon className="text-xl" />
+                  </div>
+                  <span className="text-3xl font-semibold text-slate-900">{item.value}</span>
+                </div>
+                <p className="mt-4 text-sm font-medium text-slate-700">{item.label}</p>
+                <p className="mt-1 text-xs text-slate-400">Updated from your current job pipeline</p>
+              </div>
             ))}
           </div>
-        </div>
 
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex gap-2 flex-wrap">
-            {['All Jobs', 'Featured', 'Remote', 'Full-time', 'Contract'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab.toLowerCase())}
-                className={`px-5 py-2 rounded-xl font-medium transition-all ${
-                  activeTab === tab.toLowerCase()
-                    ? 'bg-gradient-to-r from-teal-500 to-green-500 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          <div className="mt-8">
+            <CandidateResumePanel />
+          </div>
+
+          <section className="mt-8 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  Job Discovery
+                </p>
+                <h3 className="mt-2 text-2xl font-semibold text-slate-900">Explore open roles</h3>
+              </div>
+              <div className="flex w-full flex-col gap-3 md:flex-row lg:w-auto">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search by role, company, or skill"
+                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 md:min-w-[320px]"
+                />
+                <div className="flex flex-wrap gap-2">
+                  {['All Jobs', 'Featured', 'Remote', 'Contract'].map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab.toLowerCase())}
+                    className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                        activeTab === tab.toLowerCase()
+                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
+                          : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {(message || error) && (
+              <div
+                className={`mt-6 rounded-2xl border px-4 py-3 text-sm ${
+                  error
+                    ? 'border-red-100 bg-red-50 text-red-700'
+                    : 'border-emerald-100 bg-emerald-50 text-emerald-700'
                 }`}
               >
-                {tab}
-              </button>
-            ))}
-          </div>
-          <p className="text-sm text-gray-500">Showing {filteredJobs.length} jobs</p>
-        </div>
+                {error || message}
+              </div>
+            )}
 
-        {(message || error) && (
-          <div
-            className={`mb-6 rounded-2xl px-4 py-3 text-sm ${
-              error ? 'bg-red-50 border border-red-100 text-red-700' : 'bg-green-50 border border-green-100 text-green-700'
-            }`}
-          >
-            {error || message}
-          </div>
-        )}
+            <div className="mt-6 flex items-center justify-between">
+              <p className="text-sm text-slate-500">
+                Showing <span className="font-semibold text-slate-800">{filteredJobs.length}</span> roles
+              </p>
+            </div>
 
-        {loading ? (
-          <div className="bg-white rounded-3xl shadow-xl p-12 text-center">
-            <FaSpinner className="animate-spin text-3xl text-teal-600 mx-auto mb-4" />
-            <p className="text-gray-600">Loading jobs...</p>
-          </div>
-        ) : filteredJobs.length === 0 ? (
-          <div className="bg-white rounded-3xl shadow-xl p-12 text-center">
-            <FaBriefcase className="text-5xl text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-700">No jobs available</h3>
-            <p className="text-gray-500 mt-2">New API-backed opportunities will appear here.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {filteredJobs.map((job) => (
-              <div key={job.id} className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all overflow-hidden">
-                <div className="p-6">
-                  <div className="flex justify-between items-start mb-4 gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-green-500 rounded-xl flex items-center justify-center text-white text-xl shadow-lg">
-                        <FaBuilding />
+            {loading ? (
+              <div className="mt-6 rounded-[28px] bg-slate-50 p-12 text-center">
+                <FaSpinner className="mx-auto mb-4 animate-spin text-3xl text-emerald-600" />
+                <p className="text-slate-500">Loading jobs...</p>
+              </div>
+            ) : filteredJobs.length === 0 ? (
+              <div className="mt-6 rounded-[28px] bg-slate-50 p-12 text-center">
+                <FaCompass className="mx-auto mb-4 text-5xl text-slate-300" />
+                <h3 className="text-xl font-semibold text-slate-700">No jobs available</h3>
+                <p className="mt-2 text-sm text-slate-500">
+                  Try another search term or wait for more openings from the API.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-6 grid gap-5 xl:grid-cols-2">
+                {filteredJobs.map((job) => (
+                  <article
+                    key={job.id}
+                    className="group rounded-[30px] border border-emerald-100 bg-gradient-to-br from-white via-white to-emerald-50/40 p-5 transition hover:-translate-y-1 hover:border-emerald-200 hover:shadow-lg"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex min-w-0 items-start gap-4">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 shadow-sm">
+                          <FaBuilding className="text-xl" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-xl font-semibold capitalize text-slate-900">
+                              {job.title}
+                            </h4>
+                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                              {job.status}
+                            </span>
+                          </div>
+                          <p className="mt-1 truncate text-sm font-medium text-slate-500">
+                            {job.company}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="text-xl font-bold text-gray-800">{job.title}</h3>
-                        <p className="text-gray-500 text-sm flex items-center gap-1 mt-1">
-                          <FaBuilding className="text-teal-400" /> {job.company}
-                        </p>
+                      <div className="shrink-0 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        {job.applicants} applicants
                       </div>
                     </div>
-                    <button className="text-gray-400 hover:text-red-500 transition">
-                      <FaRegHeart className="text-xl" />
-                    </button>
-                  </div>
 
-                  <p className="text-sm text-gray-600 leading-6 mb-4">{job.description || 'No description provided.'}</p>
+                    <p className="mt-4 line-clamp-3 min-h-[72px] text-sm leading-6 text-slate-600">
+                      {job.description || 'No description provided.'}
+                    </p>
 
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <FaMapMarkerAlt className="text-teal-500" /> {job.location}
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-2xl bg-emerald-50/70 px-4 py-3 text-sm text-slate-600">
+                        <div className="flex items-center gap-2">
+                          <FaMapMarkerAlt className="text-emerald-600" />
+                          {job.location}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl bg-emerald-50/70 px-4 py-3 text-sm text-slate-600">
+                        <div className="flex items-center gap-2">
+                          <FaBriefcase className="text-emerald-600" />
+                          {job.experience}+ yrs
+                        </div>
+                      </div>
+                      <div className="rounded-2xl bg-emerald-50/70 px-4 py-3 text-sm text-slate-600">
+                        <div className="flex items-center gap-2">
+                          <FaStar className="text-amber-500" />
+                          {job.package}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <FaStar className="text-yellow-500" /> {job.package}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <FaCalendarAlt className="text-teal-500" /> {job.status}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <FaGraduationCap className="text-teal-500" /> {job.experience}+ years
-                    </div>
-                  </div>
 
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {job.requiredSkills.map((skill) => (
-                      <span key={skill} className="px-2 py-1 bg-teal-50 text-teal-600 text-xs rounded-lg">
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {job.requiredSkills.slice(0, 6).map((skill) => (
+                        <span
+                          key={skill}
+                          className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                      {job.requiredSkills.length > 6 && (
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+                          +{job.requiredSkills.length - 6} more
+                        </span>
+                      )}
+                    </div>
 
-                  <div className="flex justify-between items-center pt-4 border-t">
-                    <div className="flex items-center gap-3 text-xs text-gray-500">
-                      <span className="flex items-center gap-2">
-                        <FaEye className="text-teal-400" />
-                        <span>{job.applicants} applicants</span>
-                      </span>
+                    <div className="mt-5 flex flex-wrap gap-3 border-t border-slate-200 pt-4">
+                      <button
+                        onClick={() => openApplyModal(job)}
+                        disabled={job.applied}
+                        className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                          job.applied
+                          ? 'cursor-not-allowed bg-emerald-100 text-emerald-700'
+                          : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:shadow-lg'
+                        }`}
+                      >
+                        <FaEye />
+                        {job.applied ? 'Applied' : 'Apply Now'}
+                      </button>
+
                       {job.applied && (
                         <button
                           onClick={() => openChatPage(job)}
-                          className="inline-flex items-center gap-2 rounded-full border border-teal-100 bg-teal-50 px-3 py-1 text-teal-700 hover:bg-teal-100 transition"
+                          className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
                         >
                           <FaComments />
-                          Chat
+                          Open Chat
                         </button>
                       )}
+
                       {job.applied && (
                         <button
                           onClick={() => handleGenerateSkillGap(job)}
                           disabled={skillGapLoadingJobId === job.id}
-                          className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-blue-700 hover:bg-blue-100 transition disabled:opacity-50"
+                          className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
                         >
-                          {skillGapLoadingJobId === job.id ? <FaSpinner className="animate-spin" /> : <FaMapSigns />}
-                          Skill Gap
+                          {skillGapLoadingJobId === job.id ? (
+                            <FaSpinner className="animate-spin" />
+                          ) : (
+                            <FaMapSigns />
+                          )}
+                          Get Skill Gap Roadmap
                         </button>
                       )}
                     </div>
-                    <button
-                      onClick={() => openApplyModal(job)}
-                      disabled={job.applied}
-                      className={`px-5 py-2 rounded-xl transition flex items-center gap-2 ${
-                        job.applied
-                          ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                          : 'bg-gradient-to-r from-teal-500 to-green-500 text-white hover:shadow-lg'
-                      }`}
-                    >
-                      <FaEye /> {job.applied ? 'Applied' : 'Apply Now'}
-                    </button>
-                  </div>
-                  {skillGapData?.jobId === job.id && (
-                    <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
-                      <p className="text-sm font-semibold text-gray-800">Skill Gap Roadmap</p>
-                      <div className="mt-4">
-                        <p className="text-sm font-semibold text-gray-700">Missing Skills</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {skillGapData.missingSkills.length > 0 ? (
-                            skillGapData.missingSkills.map((skill) => (
-                              <span
-                                key={skill}
-                                className="px-2 py-1 bg-white text-blue-700 text-xs rounded-lg border border-blue-100"
-                              >
-                                {skill}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-sm text-gray-500">No missing skills returned.</span>
-                          )}
+
+                    {skillGapData?.jobId === job.id && (
+                      <div className="mt-4 rounded-3xl border border-blue-100 bg-blue-50/70 p-5">
+                        <p className="text-sm font-semibold text-slate-800">Skill Gap Roadmap</p>
+                        <div className="mt-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Missing Skills
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {skillGapData.missingSkills.length > 0 ? (
+                              skillGapData.missingSkills.map((skill) => (
+                                <span
+                                  key={skill}
+                                  className="rounded-full border border-blue-100 bg-white px-3 py-1 text-xs font-medium text-blue-700"
+                                >
+                                  {skill}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-sm text-slate-500">No missing skills returned.</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Roadmap
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-slate-600">{skillGapData.roadmap}</p>
                         </div>
                       </div>
-                      <div className="mt-4">
-                        <p className="text-sm font-semibold text-gray-700">Roadmap</p>
-                        <p className="mt-2 text-sm leading-6 text-gray-600">{skillGapData.roadmap}</p>
-                      </div>
-                      <div className="mt-4">
-                        <p className="text-sm font-semibold text-gray-700">Learning Resources</p>
-                        <div className="mt-3 space-y-3">
-                          {skillGapData.learningResources.length > 0 ? (
-                            skillGapData.learningResources.map((resource, index) => (
-                              <div
-                                key={`${resource.skillName ?? resource.skill ?? 'resource'}-${index}`}
-                                className="rounded-2xl bg-white border border-gray-100 p-4"
-                              >
-                                <p className="text-sm font-semibold text-gray-800">
-                                  {resource.skillName ?? resource.skill ?? 'Skill Resource'}
-                                </p>
-                                <div className="mt-3 space-y-3">
-                                  {Array.isArray(resource.videos) && resource.videos.length > 0 ? (
-                                    resource.videos.map((video, videoIndex) => (
-                                      <a
-                                        key={`${video.title ?? 'video'}-${videoIndex}`}
-                                        href={video.url || video.link || '#'}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="block rounded-xl border border-gray-100 p-3 hover:border-blue-200 hover:bg-blue-50 transition"
-                                      >
-                                        <p className="text-sm font-semibold text-blue-700">
-                                          {video.title ?? 'Learning Video'}
-                                        </p>
-                                        <p className="mt-1 text-xs text-gray-500">
-                                          {video.channel ?? 'Channel'}
-                                          {video.views ? ` • ${video.views}` : ''}
-                                        </p>
-                                      </a>
-                                    ))
-                                  ) : (
-                                    <p className="text-sm text-gray-500">No videos available.</p>
-                                  )}
-                                </div>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-sm text-gray-500">No learning resources returned.</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </article>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
+          </section>
+        </div>
       </div>
 
       {applyModalJob && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full">
-            <div className="bg-gradient-to-r from-teal-600 to-green-600 p-6 rounded-t-3xl text-white flex justify-between items-center">
-              <div>
-                <h3 className="text-2xl font-bold">Apply for {applyModalJob.title}</h3>
-                <p className="text-sm text-teal-100 mt-1">{applyModalJob.company}</p>
-              </div>
-              <button onClick={closeApplyModal} className="p-2 rounded-full hover:bg-white/20 transition">
-                <FaTimes />
-              </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+          <div className="w-full max-w-2xl rounded-[32px] bg-white shadow-2xl">
+            <div className="rounded-t-[32px] bg-gradient-to-r from-emerald-600 via-teal-600 to-green-500 px-6 py-6 text-white">
+              <h3 className="text-2xl font-semibold">Apply for {applyModalJob.title}</h3>
+              <p className="mt-2 text-sm text-slate-300">{applyModalJob.company}</p>
             </div>
             <div className="p-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Cover Letter</label>
+              <label className="block text-sm font-semibold text-slate-700">Cover Letter</label>
               <textarea
                 rows={7}
                 value={coverLetter}
                 onChange={(event) => setCoverLetter(event.target.value)}
-                placeholder="Write a short cover letter highlighting why you're a strong fit for this role."
-                className="w-full rounded-2xl border border-gray-200 p-4 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+                placeholder="Write a concise cover letter highlighting your fit for this role."
+                className="mt-3 w-full resize-none rounded-3xl border border-slate-200 p-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
-            <div className="p-6 border-t border-gray-100 flex justify-end gap-3">
-              <button onClick={closeApplyModal} className="px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-50 transition">
+            <div className="flex justify-end gap-3 border-t border-slate-100 p-6">
+              <button
+                onClick={closeApplyModal}
+                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
                 Cancel
               </button>
               <button
                 onClick={handleApply}
                 disabled={applying}
-                className="px-6 py-2 bg-gradient-to-r from-teal-500 to-green-500 text-white rounded-xl hover:shadow-lg transition disabled:opacity-50 flex items-center gap-2"
+                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 py-2 text-sm font-semibold text-white transition hover:shadow-lg disabled:opacity-50"
               >
-                {applying && <FaSpinner className="animate-spin" />}
+                {applying ? <FaSpinner className="animate-spin" /> : null}
                 Submit Application
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showProfileModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="bg-gradient-to-r from-teal-600 to-green-600 p-6 rounded-t-3xl text-white">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className="bg-white/20 p-3 rounded-full">
-                    <FaUserCircle className="text-2xl" />
-                  </div>
-                  <h2 className="text-2xl font-bold">Profile Overview</h2>
-                </div>
-                <button onClick={() => setShowProfileModal(false)} className="hover:bg-white/20 p-2 rounded-full transition">
-                  <FaTimes className="text-xl" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6">
-              <div className="flex flex-col md:flex-row gap-6 items-start mb-6">
-                <div className="w-24 h-24 bg-gradient-to-r from-teal-500 to-green-500 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-xl">
-                  {userAvatar}
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-2xl font-bold text-gray-800">{profile.name}</h3>
-                  <p className="text-teal-600 font-semibold">{profile.title}</p>
-                  <div className="flex flex-wrap gap-3 mt-2">
-                    <span className="flex items-center gap-1 text-sm text-gray-500">
-                      <FaEnvelope /> {profile.email}
-                    </span>
-                    <span className="flex items-center gap-1 text-sm text-gray-500">
-                      <FaMapMarkerAlt /> {profile.location}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <h4 className="text-lg font-bold text-gray-800 mb-2">About Me</h4>
-                <p className="text-gray-600 leading-relaxed">{profile.bio}</p>
-              </div>
-
-              <div className="mb-6">
-                <h4 className="text-lg font-bold text-gray-800 mb-3">Work Experience</h4>
-                <div className="space-y-4">
-                  {profile.experienceHistory.map((exp) => (
-                    <div key={`${exp.company}-${exp.period}`} className="border-l-4 border-teal-500 pl-4">
-                      <p className="font-semibold text-gray-800">{exp.position}</p>
-                      <p className="text-teal-600 text-sm">{exp.company} | {exp.period}</p>
-                      <p className="text-gray-500 text-sm mt-1">{exp.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <h4 className="text-lg font-bold text-gray-800 mb-3">Skills & Expertise</h4>
-                <div className="flex flex-wrap gap-2">
-                  {profile.skills.map((skill) => (
-                    <span key={skill} className="px-3 py-1 bg-teal-50 text-teal-700 rounded-full text-sm">
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t p-6 bg-gray-50 rounded-b-3xl flex justify-end gap-3">
-              <button onClick={() => setShowProfileModal(false)} className="px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-100 transition">
-                Close
-              </button>
-              <button onClick={handleEditProfile} className="px-4 py-2 bg-teal-500 text-white rounded-xl hover:bg-teal-600 transition">
-                Edit Profile
               </button>
             </div>
           </div>

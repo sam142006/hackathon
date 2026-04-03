@@ -148,8 +148,40 @@ export const downloadCandidateResume = (token, resumeId) =>
     token,
   });
 
-export const getSkillGapRoadmap = (token, candidateId, jobId) =>
-  apiRequest(`/api/recruiter/skill-gap?candidateId=${candidateId}&jobId=${jobId}`, {
+const SKILL_GAP_REQUESTS = [
+  {
+    path: (candidateId, jobId) =>
+      `/api/candidate/skill-gap-roadmap?candidateId=${candidateId}&jobId=${jobId}`,
     method: 'POST',
-    token,
-  });
+  },
+  {
+    path: () => '/api/candidate/skill-gap-roadmap',
+    method: 'POST',
+    body: (candidateId, jobId) => ({ candidateId, jobId }),
+  },
+];
+
+export const getSkillGapRoadmap = async (token, candidateId, jobId) => {
+  let lastResponse = null;
+
+  for (const requestConfig of SKILL_GAP_REQUESTS) {
+    const response = await apiRequest(requestConfig.path(candidateId, jobId), {
+      method: requestConfig.method,
+      token,
+      headers: requestConfig.body
+        ? {
+            'Content-Type': 'application/json',
+          }
+        : undefined,
+      body: requestConfig.body ? JSON.stringify(requestConfig.body(candidateId, jobId)) : undefined,
+    });
+
+    lastResponse = response;
+
+    if (response.ok || ![404, 405].includes(response.status)) {
+      return response;
+    }
+  }
+
+  return lastResponse;
+};

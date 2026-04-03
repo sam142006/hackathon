@@ -1,19 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { FaArrowLeft, FaComments, FaPaperPlane, FaSpinner } from 'react-icons/fa';
+import { FaArrowLeft, FaComments, FaPaperPlane, FaSpinner, FaUserTie } from 'react-icons/fa';
 import { clearSession, getStoredToken } from '../utils/auth';
 import { getChatHistory, initializeChat, mapChatMessageFromApi, sendChatMessage } from '../utils/chat';
 
 const parseResponseBody = async (response) => {
   const text = await response.text();
-
-  if (!text) {
-    return {};
-  }
-
+  if (!text) return {};
   try {
     return JSON.parse(text);
-  } catch (error) {
+  } catch {
     return { message: text };
   }
 };
@@ -25,15 +21,13 @@ const CandidateChat = () => {
   const initialChatRoomId = location.state?.chatRoomId ?? null;
   const targetId = location.state?.targetId ?? location.state?.jobId ?? location.state?.applicationId ?? null;
   const fallbackTargetId =
-    location.state?.fallbackTargetId ??
-    location.state?.applicationId ??
-    location.state?.jobId ??
-    null;
+    location.state?.fallbackTargetId ?? location.state?.applicationId ?? location.state?.jobId ?? null;
   const currentRole = localStorage.getItem('userRole') || '';
   const backPath =
     location.state?.backPath ??
     (currentRole.toUpperCase() === 'RECRUITER' ? '/recruiter-dashboard' : '/candidate-dashboard');
   const userEmail = localStorage.getItem('userEmail') || '';
+  const currentUserName = localStorage.getItem('userName') || '';
 
   const [chatRoomId, setChatRoomId] = useState(initialChatRoomId);
   const [applicationId, setApplicationId] = useState(location.state?.applicationId ?? null);
@@ -42,7 +36,7 @@ const CandidateChat = () => {
   const [candidateName, setCandidateName] = useState(
     location.state?.candidateName ?? localStorage.getItem('userName') ?? 'Candidate'
   );
-  const [recruiterName, setRecruiterName] = useState('Recruiter');
+  const [recruiterName, setRecruiterName] = useState(location.state?.recruiterName ?? 'Recruiter');
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -51,35 +45,24 @@ const CandidateChat = () => {
 
   const withAuth = async (request) => {
     const token = getStoredToken();
-
     if (!token) {
       clearSession();
       navigate('/', { replace: true });
       return null;
     }
-
     const response = await request(token);
-
     if (response.status === 401 || response.status === 403) {
       clearSession();
       navigate('/', { replace: true });
       return null;
     }
-
     return response;
   };
 
   const formatChatTime = (value) => {
-    if (!value) {
-      return 'Just now';
-    }
-
+    if (!value) return 'Just now';
     const parsedDate = new Date(value);
-
-    if (Number.isNaN(parsedDate.getTime())) {
-      return value;
-    }
-
+    if (Number.isNaN(parsedDate.getTime())) return value;
     return parsedDate.toLocaleString('en-IN', {
       day: '2-digit',
       month: 'short',
@@ -90,19 +73,15 @@ const CandidateChat = () => {
 
   const loadMessages = async (roomId) => {
     const response = await withAuth((token) => getChatHistory(token, roomId));
-
-    if (!response) {
-      return;
-    }
-
+    if (!response) return;
     const data = await parseResponseBody(response);
-
-    if (!response.ok) {
-      throw new Error(data.message || 'Unable to load chat history.');
-    }
-
+    if (!response.ok) throw new Error(data.message || 'Unable to load chat history.');
     const messageList = Array.isArray(data) ? data : data.messages ?? [];
-    setMessages(messageList.map((item) => mapChatMessageFromApi(item, userEmail, currentRole)));
+    setMessages(
+      messageList.map((item) =>
+        mapChatMessageFromApi(item, userEmail, currentRole, currentUserName)
+      )
+    );
   };
 
   useEffect(() => {
@@ -110,7 +89,6 @@ const CandidateChat = () => {
       if (initialChatRoomId) {
         setLoading(true);
         setError('');
-
         try {
           await loadMessages(initialChatRoomId);
         } catch (chatError) {
@@ -119,7 +97,6 @@ const CandidateChat = () => {
         } finally {
           setLoading(false);
         }
-
         return;
       }
 
@@ -140,20 +117,14 @@ const CandidateChat = () => {
 
         for (const currentTarget of uniqueTargets) {
           const response = await withAuth((token) => initializeChat(token, currentTarget));
-
-          if (!response) {
-            return;
-          }
-
+          if (!response) return;
           const data = await parseResponseBody(response);
-
           if (!response.ok) {
             lastErrorMessage = data.message || lastErrorMessage;
             continue;
           }
 
           const roomId = data.chatRoomId ?? data.chatId ?? data.id ?? null;
-
           if (!roomId) {
             lastErrorMessage = 'Chat room ID was not returned by the server.';
             continue;
@@ -175,9 +146,7 @@ const CandidateChat = () => {
           break;
         }
 
-        if (!initialized) {
-          throw new Error(lastErrorMessage);
-        }
+        if (!initialized) throw new Error(lastErrorMessage);
       } catch (chatError) {
         setError(chatError.message || 'Unable to start chat.');
         setMessages([]);
@@ -207,7 +176,7 @@ const CandidateChat = () => {
       content,
       createdAt: new Date().toISOString(),
       senderName: 'You',
-      senderRole: 'CANDIDATE',
+      senderRole: currentRole || 'CANDIDATE',
       isOwnMessage: true,
     };
 
@@ -218,24 +187,18 @@ const CandidateChat = () => {
 
     try {
       const response = await withAuth((token) => sendChatMessage(token, applicationId, content));
-
       if (!response) {
         setMessages((currentMessages) =>
           currentMessages.filter((item) => item.id !== optimisticMessage.id)
         );
         return;
       }
-
       const data = await parseResponseBody(response);
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Unable to send message.');
-      }
-
+      if (!response.ok) throw new Error(data.message || 'Unable to send message.');
       const savedMessage = data.message ?? data.data ?? data;
-        setMessages((currentMessages) => [
+      setMessages((currentMessages) => [
         ...currentMessages.filter((item) => item.id !== optimisticMessage.id),
-        mapChatMessageFromApi(savedMessage, userEmail, currentRole),
+        mapChatMessageFromApi(savedMessage, userEmail, currentRole, currentUserName),
       ]);
     } catch (sendError) {
       setMessages((currentMessages) =>
@@ -248,47 +211,64 @@ const CandidateChat = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50 to-teal-100">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6 flex items-center justify-between gap-4">
+    <div className="h-screen overflow-hidden bg-[#eef3f8]">
+      <div className="mx-auto flex h-full max-w-6xl flex-col px-4 py-3 sm:px-6 lg:px-8">
+        <div className="mb-3 flex items-center justify-between gap-4">
           <button
             onClick={() => navigate(backPath)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-white/70 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm"
           >
             <FaArrowLeft />
             Back to Dashboard
           </button>
-          <div className="rounded-2xl border border-emerald-100 bg-white/80 px-4 py-2 text-sm text-slate-500 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500 shadow-sm">
             Application ID: <span className="font-semibold text-slate-700">{applicationId ?? 'N/A'}</span>
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-[32px] border border-white/70 bg-white/90 shadow-2xl">
-          <div className="bg-gradient-to-r from-teal-600 via-emerald-600 to-green-500 px-8 py-7 text-white">
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-white/15 p-3">
-                <FaComments className="text-2xl" />
+        <div className="flex min-h-0 flex-1 overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-xl">
+          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="border-b border-emerald-200 bg-gradient-to-r from-emerald-600 via-teal-600 to-green-500 px-6 py-4 text-white">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-white/15 p-2">
+                  <FaComments className="text-lg" />
+                </div>
+                <div>
+                  <h1 className="text-[32px] font-bold leading-none md:text-[30px]">{jobTitle}</h1>
+                  <p className="mt-1 text-sm text-emerald-50">
+                    {currentRole.toUpperCase() === 'RECRUITER'
+                      ? `Direct conversation with ${candidateName}`
+                      : `Direct recruiter conversation with ${recruiterName} at ${company}`}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-3xl font-bold">{jobTitle}</h1>
-                <p className="mt-1 text-sm text-emerald-50">
-                  {currentRole.toUpperCase() === 'RECRUITER'
-                    ? `Chat with ${candidateName} about ${jobTitle}`
-                    : `Direct recruiter conversation with ${recruiterName} at ${company}`}
-                </p>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2">
+                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-100/80">Participant</p>
+                  <p className="mt-1.5 flex items-center gap-2 text-sm font-semibold text-white">
+                    <FaUserTie className="text-emerald-300" />
+                    {currentRole.toUpperCase() === 'RECRUITER' ? candidateName : recruiterName}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2">
+                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-100/80">Workspace</p>
+                  <p className="mt-1.5 text-sm font-semibold text-white">{company}</p>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="p-6 md:p-8">
+          <div className="flex min-h-0 flex-1 flex-col p-4 md:p-5">
             {error && (
               <div className="mb-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
               </div>
             )}
 
-            <div className="rounded-[28px] border border-slate-100 bg-gradient-to-b from-slate-50 to-white p-4 shadow-inner">
-              <div className="h-[420px] overflow-y-auto pr-2">
+            <div className="flex min-h-0 flex-1 flex-col rounded-[28px] border border-slate-200 bg-slate-50 p-3 shadow-inner">
+              <div className="min-h-0 flex-1 overflow-y-auto pr-2">
                 {loading ? (
                   <div className="flex h-full items-center justify-center gap-3 text-slate-500">
                     <FaSpinner className="animate-spin text-emerald-600" />
@@ -296,29 +276,36 @@ const CandidateChat = () => {
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="flex h-full items-center justify-center text-center text-slate-500">
-                    No messages yet. Start the conversation with the recruiter.
+                    No messages yet. Start the conversation from the message box below.
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {messages.map((message) => (
                       <div
                         key={message.id}
                         className={`flex ${message.isOwnMessage ? 'justify-end' : 'justify-start'}`}
                       >
                         <div
-                          className={`max-w-2xl rounded-[26px] px-4 py-3 shadow-sm ${
+                          className={`max-w-2xl px-4 py-2 shadow-sm ${
                             message.isOwnMessage
-                              ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-white'
-                              : 'border border-slate-100 bg-white text-slate-800'
+                              ? 'rounded-[26px] rounded-br-md bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
+                              : 'rounded-[26px] rounded-bl-md border border-slate-200 bg-white text-slate-800'
                           }`}
                         >
-                          <p className="text-sm leading-6">{message.content}</p>
-                          <div
-                            className={`mt-2 text-[11px] ${
-                              message.isOwnMessage ? 'text-emerald-50' : 'text-slate-400'
+                          <p
+                            className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${
+                              message.isOwnMessage ? 'text-slate-300' : 'text-slate-400'
                             }`}
                           >
-                            {message.senderName} • {formatChatTime(message.createdAt)}
+                            {message.senderName}
+                          </p>
+                          <p className="mt-1 text-sm leading-5">{message.content}</p>
+                          <div
+                            className={`mt-2 text-[11px] ${
+                              message.isOwnMessage ? 'text-slate-300' : 'text-slate-400'
+                            }`}
+                          >
+                            {formatChatTime(message.createdAt)}
                           </div>
                         </div>
                       </div>
@@ -328,19 +315,19 @@ const CandidateChat = () => {
                 )}
               </div>
 
-              <div className="mt-5 border-t border-slate-100 pt-5">
+              <div className="mt-3 border-t border-slate-200 pt-3">
                 <div className="flex flex-col gap-3 md:flex-row">
                   <textarea
-                    rows={4}
+                    rows={1}
                     value={messageInput}
                     onChange={(event) => setMessageInput(event.target.value)}
-                    placeholder="Write your message here..."
-                    className="flex-1 rounded-[24px] border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+                    placeholder="Write a clear professional message..."
+                    className="flex-1 resize-none rounded-[20px] border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <button
                     onClick={handleSend}
                     disabled={sending || loading || !messageInput.trim()}
-                    className="inline-flex items-center justify-center gap-2 rounded-[24px] bg-gradient-to-r from-teal-500 to-emerald-500 px-6 py-4 font-semibold text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-[20px] bg-gradient-to-r from-emerald-500 to-teal-500 px-5 py-2.5 font-semibold text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {sending ? <FaSpinner className="animate-spin" /> : <FaPaperPlane />}
                     Send
@@ -349,11 +336,18 @@ const CandidateChat = () => {
               </div>
             </div>
 
-            <div className="mt-5 text-sm text-slate-500">
-              Chat Room ID: <span className="font-semibold text-slate-700">{chatRoomId ?? 'Connecting...'}</span>
-              {' '}| Application ID: <span className="font-semibold text-slate-700">{applicationId ?? 'Resolving...'}</span>
-              {' '}| Candidate: <span className="font-semibold text-slate-700">{candidateName}</span>
+            <div className="mt-3 grid gap-3 text-sm text-slate-500 md:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
+                Chat Room ID: <span className="font-semibold text-slate-700">{chatRoomId ?? 'Connecting...'}</span>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
+                Application ID: <span className="font-semibold text-slate-700">{applicationId ?? 'Resolving...'}</span>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2">
+                Candidate: <span className="font-semibold text-slate-700">{candidateName}</span>
+              </div>
             </div>
+          </div>
           </div>
         </div>
       </div>
