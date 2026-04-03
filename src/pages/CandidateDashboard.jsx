@@ -214,9 +214,12 @@ const CandidateDashboard = () => {
       }
       setSkillGapData({
         jobId: job.id,
+        analysisId: data.analysisId ?? null,
+        jobTitle: data.jobTitle ?? job.title,
         missingSkills: Array.isArray(data.missingSkills) ? data.missingSkills : [],
         roadmap: data.roadmap ?? data.roadmapText ?? 'No roadmap available.',
         learningResources: Array.isArray(data.learningResources) ? data.learningResources : [],
+        createdAt: data.createdAt ?? null,
       });
       setMessage(`Skill-gap roadmap generated for ${job.title}.`);
     } catch (skillGapError) {

@@ -150,6 +150,11 @@ export const downloadCandidateResume = (token, resumeId) =>
 
 const SKILL_GAP_REQUESTS = [
   {
+    path: (_candidateId, jobId) => `/api/candidate/jobs/${jobId}/skill-gap`,
+    method: 'POST',
+    body: (candidateId, jobId) => ({ candidateId, jobId }),
+  },
+  {
     path: (candidateId, jobId) =>
       `/api/candidate/skill-gap-roadmap?candidateId=${candidateId}&jobId=${jobId}`,
     method: 'POST',
