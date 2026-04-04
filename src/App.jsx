@@ -7,6 +7,7 @@ import CandidateDashboard from './pages/CandidateDashboard';
 import MockInterview from './pages/MockInterview';
 import CandidateChat from './pages/CandidateChat';
 import RecruiterApplicants from './pages/RecruiterApplicants';
+import SkillGapRoadmapPage from './pages/SkillGapRoadmapPage';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Route path="/candidate-dashboard" element={<CandidateDashboard />} />
         <Route path="/candidate-chat" element={<CandidateChat />} />
         <Route path="/mock-interview" element={<MockInterview />} />
+        <Route path="/candidate/skill-gap-roadmap/:jobId" element={<SkillGapRoadmapPage />} />
         <Route path="/candidate" element={<Navigate to="/candidate-dashboard" replace />} />
       </Route>
 

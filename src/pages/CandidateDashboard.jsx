@@ -18,7 +18,13 @@ import {
 import BrandLogo from '../components/BrandLogo';
 import CandidateResumePanel from '../components/CandidateResumePanel';
 import { clearSession, getStoredToken } from '../utils/auth';
-import { applyForJob, getCandidateJobs, getSkillGapRoadmap, mapJobFromApi } from '../utils/jobs';
+import {
+  applyForJob,
+  getCandidateJobs,
+  getSkillGapRoadmap,
+  mapJobFromApi,
+  normalizeSkillGapData,
+} from '../utils/jobs';
 
 const parseResponseBody = async (response) => {
   const text = await response.text();
@@ -84,7 +90,6 @@ const CandidateDashboard = () => {
   const [coverLetter, setCoverLetter] = useState('');
   const [applying, setApplying] = useState(false);
   const [skillGapLoadingJobId, setSkillGapLoadingJobId] = useState(null);
-  const [skillGapData, setSkillGapData] = useState(null);
 
   const userName = localStorage.getItem('userName') || 'Alex Morgan';
   const userEmail = localStorage.getItem('userEmail') || 'alex.morgan@example.com';
@@ -202,7 +207,6 @@ const CandidateDashboard = () => {
       return;
     }
     setSkillGapLoadingJobId(job.id);
-    setSkillGapData(null);
     setError('');
     setMessage('');
     try {
@@ -212,16 +216,15 @@ const CandidateDashboard = () => {
       if (!response.ok) {
         throw new Error(getSkillGapErrorMessage(data));
       }
-      setSkillGapData({
-        jobId: job.id,
-        analysisId: data.analysisId ?? null,
-        jobTitle: data.jobTitle ?? job.title,
-        missingSkills: Array.isArray(data.missingSkills) ? data.missingSkills : [],
-        roadmap: data.roadmap ?? data.roadmapText ?? 'No roadmap available.',
-        learningResources: Array.isArray(data.learningResources) ? data.learningResources : [],
-        createdAt: data.createdAt ?? null,
+      const normalizedSkillGap = normalizeSkillGapData(data, job);
+      setMessage(`Skill-gap roadmap generated for ${job.title}. Opening full roadmap view...`);
+      navigate(`/candidate/skill-gap-roadmap/${job.id}`, {
+        state: {
+          skillGapPayload: data,
+          skillGapData: normalizedSkillGap,
+          job,
+        },
       });
-      setMessage(`Skill-gap roadmap generated for ${job.title}.`);
     } catch (skillGapError) {
       setError(skillGapError.message || 'Unable to generate skill-gap roadmap.');
     } finally {
@@ -606,37 +609,6 @@ const CandidateDashboard = () => {
                         </button>
                       )}
                     </div>
-
-                    {skillGapData?.jobId === job.id && (
-                      <div className="mt-4 rounded-3xl border border-blue-100 bg-blue-50/70 p-5">
-                        <p className="text-sm font-semibold text-slate-800">Skill Gap Roadmap</p>
-                        <div className="mt-4">
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                            Missing Skills
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {skillGapData.missingSkills.length > 0 ? (
-                              skillGapData.missingSkills.map((skill) => (
-                                <span
-                                  key={skill}
-                                  className="rounded-full border border-blue-100 bg-white px-3 py-1 text-xs font-medium text-blue-700"
-                                >
-                                  {skill}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-sm text-slate-500">No missing skills returned.</span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="mt-4">
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                            Roadmap
-                          </p>
-                          <p className="mt-2 text-sm leading-6 text-slate-600">{skillGapData.roadmap}</p>
-                        </div>
-                      </div>
-                    )}
                   </article>
                 ))}
               </div>

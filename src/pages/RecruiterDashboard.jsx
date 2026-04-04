@@ -15,6 +15,7 @@ import BrandLogo from '../components/BrandLogo';
 import { clearSession, getStoredToken } from '../utils/auth';
 import {
   createRecruiterJob,
+  getJobApplications,
   getRecruiterJobs,
   mapJobFromApi,
   toggleRecruiterJobStatus,
@@ -88,7 +89,42 @@ const RecruiterDashboard = () => {
       const data = await parseResponseBody(response);
       if (!response.ok) throw new Error(data.message || 'Unable to load recruiter jobs.');
       const jobList = Array.isArray(data) ? data : data.jobs ?? [];
-      setJobs(jobList.map(mapJobFromApi));
+      const mappedJobs = jobList.map(mapJobFromApi);
+
+      const jobCounts = await Promise.all(
+        mappedJobs.map(async (job) => {
+          try {
+            const applicationsResponse = await withAuth((token) => getJobApplications(token, job.id));
+            if (!applicationsResponse) {
+              return { jobId: job.id, applicants: Number(job.applicants || 0) };
+            }
+
+            const applicationsData = await parseResponseBody(applicationsResponse);
+            if (!applicationsResponse.ok) {
+              return { jobId: job.id, applicants: Number(job.applicants || 0) };
+            }
+
+            const applications = Array.isArray(applicationsData)
+              ? applicationsData
+              : applicationsData.applications ?? [];
+
+            return { jobId: job.id, applicants: applications.length };
+          } catch {
+            return { jobId: job.id, applicants: Number(job.applicants || 0) };
+          }
+        })
+      );
+
+      const applicantsByJobId = Object.fromEntries(
+        jobCounts.map((item) => [item.jobId, item.applicants])
+      );
+
+      setJobs(
+        mappedJobs.map((job) => ({
+          ...job,
+          applicants: applicantsByJobId[job.id] ?? Number(job.applicants || 0),
+        }))
+      );
     } catch (loadError) {
       setError(loadError.message || 'Unable to load recruiter jobs.');
       setJobs([]);

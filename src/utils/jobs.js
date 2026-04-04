@@ -43,7 +43,13 @@ export const mapJobFromApi = (job) => ({
   package: job.package ?? job.salary ?? 'Not specified',
   location: job.location ?? 'Remote',
   status: job.status ?? 'Active',
-  applicants: job.applicantsCount ?? job.applicants ?? 0,
+  applicants:
+    job.applicantsCount ??
+    job.applicants ??
+    job.applicationCount ??
+    job.applicationsCount ??
+    job.totalApplicants ??
+    (Array.isArray(job.applications) ? job.applications.length : 0),
   postedDate: job.postedDate ?? job.createdAt ?? '',
   applied: Boolean(
     job.applied ??
@@ -189,4 +195,188 @@ export const getSkillGapRoadmap = async (token, candidateId, jobId) => {
   }
 
   return lastResponse;
+};
+
+const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const extractTextList = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => extractTextList(item))
+      .filter((item) => typeof item === 'string' && item.trim() !== '');
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split('\n')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (isPlainObject(value)) {
+    return Object.values(value).flatMap((item) => extractTextList(item));
+  }
+
+  return [];
+};
+
+const stringifyValue = (value) => {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map((item) => stringifyValue(item)).filter(Boolean).join(', ');
+  if (isPlainObject(value)) {
+    const preferredText = value.title ?? value.name ?? value.label ?? value.description ?? value.summary;
+    if (preferredText) return stringifyValue(preferredText);
+  }
+  return '';
+};
+
+const normalizeLearningResource = (resource, index) => {
+  if (typeof resource === 'string') {
+    return {
+      id: `resource-${index}`,
+      title: `Resource ${index + 1}`,
+      description: resource,
+      url: '',
+      platform: '',
+      type: '',
+    };
+  }
+
+  if (!isPlainObject(resource)) {
+    return null;
+  }
+
+  return {
+    id: resource.id ?? `resource-${index}`,
+    title:
+      resource.title ??
+      resource.name ??
+      resource.topic ??
+      resource.skill ??
+      resource.label ??
+      `Resource ${index + 1}`,
+    description:
+      resource.description ??
+      resource.summary ??
+      resource.reason ??
+      resource.notes ??
+      resource.content ??
+      '',
+    url:
+      resource.url ??
+      resource.link ??
+      resource.href ??
+      resource.videoUrl ??
+      resource.youtubeUrl ??
+      '',
+    platform: resource.platform ?? resource.provider ?? resource.source ?? '',
+    type: resource.type ?? resource.category ?? resource.format ?? '',
+    raw: resource,
+  };
+};
+
+const extractLinksFromValue = (value, path = 'root') => {
+  const links = [];
+
+  if (typeof value === 'string') {
+    const matches = value.match(/https?:\/\/[^\s"]+/g) ?? [];
+    matches.forEach((url, index) => {
+      links.push({
+        id: `${path}-link-${index}`,
+        url: url.replace(/[),.;]+$/, ''),
+        label: value.length > 120 ? `${value.slice(0, 117)}...` : value,
+        path,
+        isYoutube: /youtu\.be|youtube\.com/i.test(url),
+      });
+    });
+    return links;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      links.push(...extractLinksFromValue(item, `${path}[${index}]`));
+    });
+    return links;
+  }
+
+  if (isPlainObject(value)) {
+    Object.entries(value).forEach(([key, nestedValue]) => {
+      links.push(...extractLinksFromValue(nestedValue, `${path}.${key}`));
+    });
+  }
+
+  return links;
+};
+
+const getRoadmapText = (payload) => {
+  const roadmapValue =
+    payload?.roadmap ??
+    payload?.roadmapText ??
+    payload?.plan ??
+    payload?.summary ??
+    payload?.analysis ??
+    payload?.skillGapRoadmap;
+
+  if (!roadmapValue) return 'No roadmap available.';
+
+  if (typeof roadmapValue === 'string') return roadmapValue;
+
+  if (Array.isArray(roadmapValue)) {
+    return roadmapValue.map((item) => stringifyValue(item)).filter(Boolean).join('\n');
+  }
+
+  if (isPlainObject(roadmapValue)) {
+    const orderedFields = ['overview', 'summary', 'timeline', 'steps', 'recommendations', 'details'];
+    const preferredText = orderedFields
+      .flatMap((field) => extractTextList(roadmapValue[field]))
+      .filter(Boolean);
+
+    if (preferredText.length > 0) {
+      return preferredText.join('\n');
+    }
+  }
+
+  return stringifyValue(roadmapValue) || 'No roadmap available.';
+};
+
+export const normalizeSkillGapData = (payload, fallbackJob = {}) => {
+  const learningResourceCandidates = [
+    ...(Array.isArray(payload?.learningResources) ? payload.learningResources : []),
+    ...(Array.isArray(payload?.resources) ? payload.resources : []),
+    ...(Array.isArray(payload?.recommendedResources) ? payload.recommendedResources : []),
+    ...(Array.isArray(payload?.youtubeLinks) ? payload.youtubeLinks : []),
+    ...(Array.isArray(payload?.videos) ? payload.videos : []),
+  ];
+
+  const learningResources = learningResourceCandidates
+    .map((resource, index) => normalizeLearningResource(resource, index))
+    .filter(Boolean);
+
+  const allLinks = extractLinksFromValue(payload);
+  const seenLinks = new Set();
+  const uniqueLinks = allLinks.filter((link) => {
+    if (!link.url || seenLinks.has(link.url)) return false;
+    seenLinks.add(link.url);
+    return true;
+  });
+
+  const missingSkillsSource =
+    payload?.missingSkills ??
+    payload?.skillGaps ??
+    payload?.missingTechnicalSkills ??
+    payload?.gapSkills ??
+    [];
+
+  return {
+    analysisId: payload?.analysisId ?? payload?.id ?? null,
+    jobId: payload?.jobId ?? fallbackJob.id ?? null,
+    jobTitle: payload?.jobTitle ?? fallbackJob.title ?? 'Skill Gap Roadmap',
+    createdAt: payload?.createdAt ?? payload?.generatedAt ?? null,
+    missingSkills: extractTextList(missingSkillsSource),
+    roadmap: getRoadmapText(payload),
+    learningResources,
+    allLinks: uniqueLinks,
+    rawData: payload,
+  };
 };
