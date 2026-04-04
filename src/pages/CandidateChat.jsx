@@ -246,15 +246,21 @@ const CandidateChat = () => {
 
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2">
-                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-100/80">Participant</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-100/80">
+                    {currentRole.toUpperCase() === 'RECRUITER' ? 'Candidate' : 'Recruiter'}
+                  </p>
                   <p className="mt-1.5 flex items-center gap-2 text-sm font-semibold text-white">
                     <FaUserTie className="text-emerald-300" />
                     {currentRole.toUpperCase() === 'RECRUITER' ? candidateName : recruiterName}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2">
-                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-100/80">Workspace</p>
-                  <p className="mt-1.5 text-sm font-semibold text-white">{company}</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-100/80">
+                    {currentRole.toUpperCase() === 'RECRUITER' ? 'Recruiter' : 'Candidate'}
+                  </p>
+                  <p className="mt-1.5 text-sm font-semibold text-white">
+                    {currentRole.toUpperCase() === 'RECRUITER' ? recruiterName : candidateName}
+                  </p>
                 </div>
               </div>
             </div>

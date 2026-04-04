@@ -11,7 +11,7 @@ import {
   FaArrowLeft,
   FaRegEdit,
 } from 'react-icons/fa';
-import { clearSession, getStoredToken } from '../utils/auth';
+import { clearSession, getDefaultRouteForRole, getStoredToken } from '../utils/auth';
 import {
   endInterviewSession,
   getInterviewCompletionStatus,
@@ -52,6 +52,7 @@ const MockInterview = () => {
   const [loadingAction, setLoadingAction] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const userRole = localStorage.getItem('userRole') || '';
 
   const strengths = useMemo(() => normalizeList(resultData?.strengths), [resultData]);
   const weaknesses = useMemo(() => normalizeList(resultData?.weaknesses), [resultData]);
@@ -319,24 +320,23 @@ const MockInterview = () => {
 
   const handleExit = async () => {
     const shouldTryEndingSession = sessionStarted || interviewCompleted || isInterviewComplete;
+    const dashboardPath = getDefaultRouteForRole(userRole);
 
     if (shouldTryEndingSession) {
       setLoadingAction('exit');
 
-      withAuth((token) => endInterviewSession(token))
-        .then(async (response) => {
-          if (!response) {
-            return;
-          }
+      try {
+        const response = await withAuth((token) => endInterviewSession(token));
 
-          if (response.ok) {
-            resetInterviewState('');
-          }
-        })
-        .catch(() => {});
+        if (response?.ok) {
+          resetInterviewState('');
+        }
+      } catch {
+        // Ignore exit cleanup failures and still return the user to the dashboard.
+      }
     }
 
-    navigate('/candidate-dashboard', { replace: true });
+    navigate(dashboardPath, { replace: true });
   };
 
   const progressPercent =
