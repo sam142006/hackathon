@@ -8,7 +8,6 @@ import {
   FaLayerGroup,
   FaMapSigns,
   FaSpinner,
-  FaTerminal,
   FaTimes,
   FaTools,
   FaYoutube,
@@ -52,67 +51,36 @@ const getRoadmapSteps = (roadmap) =>
   String(roadmap || '')
     .split('\n')
     .map((step) => step.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .slice(0, 6);
 
-const renderValue = (value, depth = 0) => {
-  if (value === null || value === undefined || value === '') {
-    return <span className="text-slate-400">Not available</span>;
-  }
+const getDisplayLinks = (skillGapData) => {
+  const resourceLinks = skillGapData.learningResources
+    .filter((resource) => resource.url)
+    .map((resource, index) => ({
+      id: resource.id ?? `resource-${index}`,
+      title: resource.title,
+      subtitle: resource.platform || resource.type || 'Learning resource',
+      url: resource.url,
+      isYoutube: /youtu\.be|youtube\.com/i.test(resource.url),
+    }));
 
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    const text = String(value);
-    const urlMatch = text.match(/^https?:\/\/\S+$/);
+  const fallbackLinks = skillGapData.allLinks.slice(0, 6).map((link, index) => ({
+    id: link.id ?? `link-${index}`,
+    title: link.isYoutube ? `YouTube Resource ${index + 1}` : `External Resource ${index + 1}`,
+    subtitle: link.path,
+    url: link.url,
+    isYoutube: link.isYoutube,
+  }));
 
-    if (urlMatch) {
-      return (
-        <a
-          href={text}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-2 break-all text-emerald-700 underline decoration-emerald-300 underline-offset-4"
-        >
-          {text}
-          <FaExternalLinkAlt className="text-xs" />
-        </a>
-      );
-    }
+  const combined = [...resourceLinks, ...fallbackLinks];
+  const seenUrls = new Set();
 
-    return <span className="whitespace-pre-wrap break-words text-slate-700">{text}</span>;
-  }
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="text-slate-400">No items</span>;
-
-    return (
-      <div className="space-y-3">
-        {value.map((item, index) => (
-          <div
-            key={`${depth}-${index}`}
-            className="rounded-3xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm"
-          >
-            <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Item {index + 1}
-            </div>
-            {renderValue(item, depth + 1)}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {Object.entries(value).map(([key, nestedValue]) => (
-        <div
-          key={`${depth}-${key}`}
-          className="rounded-3xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm"
-        >
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{key}</div>
-          <div className="mt-2">{renderValue(nestedValue, depth + 1)}</div>
-        </div>
-      ))}
-    </div>
-  );
+  return combined.filter((item) => {
+    if (!item.url || seenUrls.has(item.url)) return false;
+    seenUrls.add(item.url);
+    return true;
+  });
 };
 
 const SkillGapRoadmapPage = () => {
@@ -177,6 +145,7 @@ const SkillGapRoadmapPage = () => {
 
   const closePage = () => navigate('/candidate-dashboard');
   const roadmapSteps = getRoadmapSteps(skillGapData?.roadmap);
+  const displayLinks = skillGapData ? getDisplayLinks(skillGapData) : [];
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.18),_transparent_32%),radial-gradient(circle_at_top_right,_rgba(14,165,233,0.12),_transparent_26%),linear-gradient(180deg,_#f7fbfa_0%,_#eef6f4_44%,_#f8fafc_100%)]">
@@ -219,22 +188,21 @@ const SkillGapRoadmapPage = () => {
               <div className="relative grid gap-8 xl:grid-cols-[1.4fr_0.8fr]">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-100/90">
-                    Full Backend View
+                    Skill Gap Summary
                   </p>
                   <h1 className="mt-4 max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl">
-                    Skill Gap Roadmap for {skillGapData.jobTitle}
+                    Smart roadmap for {skillGapData.jobTitle}
                   </h1>
                   <p className="mt-4 max-w-3xl text-sm leading-7 text-emerald-50/95">
-                    {userName}, yahan roadmap ko readable action plan format me dikhaya gaya hai,
-                    saath hi backend se aaya complete data, links, aur learning resources bhi visible
-                    hain.
+                    {userName}, backend response ko simplify karke sirf most useful roadmap points,
+                    missing skills, aur recommended learning links yahan dikhaye gaye hain.
                   </p>
                   <div className="mt-6 flex flex-wrap gap-3">
                     <div className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/95">
-                      {skillGapData.missingSkills.length} missing skills
+                      {skillGapData.missingSkills.length} key skill gaps
                     </div>
                     <div className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/95">
-                      {skillGapData.allLinks.length} extracted links
+                      {displayLinks.length} curated links
                     </div>
                     <div className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/95">
                       Updated {formatDateTime(skillGapData.createdAt)}
@@ -264,7 +232,7 @@ const SkillGapRoadmapPage = () => {
                       key={item.label}
                       className="rounded-[28px] border border-white/15 bg-white/10 p-4 backdrop-blur"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-4">
                         <div className="rounded-2xl bg-white/14 p-3 text-white">
                           <item.icon className="text-lg" />
                         </div>
@@ -286,22 +254,22 @@ const SkillGapRoadmapPage = () => {
                 {
                   label: 'Missing Skills',
                   value: skillGapData.missingSkills.length || 0,
-                  note: 'Core gaps identified from backend analysis',
+                  note: 'Most important capability gaps for this role',
                 },
                 {
-                  label: 'Links Found',
-                  value: skillGapData.allLinks.length || 0,
-                  note: 'YouTube and external URLs extracted automatically',
+                  label: 'Action Steps',
+                  value: roadmapSteps.length || 0,
+                  note: 'Useful roadmap items selected from backend output',
                 },
                 {
                   label: 'Learning Resources',
                   value: skillGapData.learningResources.length || 0,
-                  note: 'Structured items returned by the roadmap API',
+                  note: 'Structured resources returned by the API',
                 },
                 {
                   label: 'Generated At',
                   value: formatDateTime(skillGapData.createdAt),
-                  note: 'Timestamp from the stored backend response',
+                  note: 'Latest stored roadmap generation time',
                 },
               ].map((item) => (
                 <div
@@ -327,14 +295,11 @@ const SkillGapRoadmapPage = () => {
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                       Roadmap Overview
                     </p>
-                    <h2 className="mt-1 text-2xl font-semibold text-slate-900">Action plan from backend</h2>
+                    <h2 className="mt-1 text-2xl font-semibold text-slate-900">Recommended next steps</h2>
                   </div>
                 </div>
-                <p className="mt-6 whitespace-pre-wrap text-sm leading-7 text-slate-600">
-                  {skillGapData.roadmap}
-                </p>
 
-                {roadmapSteps.length > 0 && (
+                {roadmapSteps.length > 0 ? (
                   <div className="mt-8 space-y-4">
                     {roadmapSteps.map((step, index) => (
                       <div
@@ -355,6 +320,10 @@ const SkillGapRoadmapPage = () => {
                       </div>
                     ))}
                   </div>
+                ) : (
+                  <p className="mt-6 text-sm leading-7 text-slate-600">
+                    Detailed roadmap text available nahi tha, lekin important skill gaps aur learning resources niche curated form me diye gaye hain.
+                  </p>
                 )}
               </div>
 
@@ -386,34 +355,6 @@ const SkillGapRoadmapPage = () => {
                     )}
                   </div>
                 </div>
-
-                <div className="rounded-[32px] border border-white/70 bg-[linear-gradient(180deg,_#0f172a_0%,_#111827_100%)] p-6 text-white shadow-[0_24px_60px_-28px_rgba(15,23,42,0.55)]">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-2xl bg-white/10 p-3 text-cyan-200">
-                      <FaTerminal className="text-xl" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                        Backend Snapshot
-                      </p>
-                      <h2 className="mt-1 text-2xl font-semibold text-white">Stored metadata</h2>
-                    </div>
-                  </div>
-                  <div className="mt-6 space-y-4 text-sm">
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Role</p>
-                      <p className="mt-2 text-base font-medium text-white">{skillGapData.jobTitle}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Analysis ID</p>
-                      <p className="mt-2 break-all text-cyan-100">{skillGapData.analysisId || 'Not provided'}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Created At</p>
-                      <p className="mt-2 text-cyan-100">{formatDateTime(skillGapData.createdAt)}</p>
-                    </div>
-                  </div>
-                </div>
               </div>
             </section>
 
@@ -424,19 +365,19 @@ const SkillGapRoadmapPage = () => {
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    Links And Resources
+                    Learning Resources
                   </p>
                   <h2 className="mt-1 text-2xl font-semibold text-slate-900">
-                    YouTube links and all extracted URLs
+                    Curated learning links
                   </h2>
                 </div>
               </div>
 
               <div className="mt-6 grid gap-4 xl:grid-cols-2">
-                {skillGapData.allLinks.length > 0 ? (
-                  skillGapData.allLinks.map((link, index) => (
+                {displayLinks.length > 0 ? (
+                  displayLinks.map((link, index) => (
                     <a
-                      key={link.id}
+                      key={`${link.id}-${index}`}
                       href={link.url}
                       target="_blank"
                       rel="noreferrer"
@@ -444,14 +385,10 @@ const SkillGapRoadmapPage = () => {
                     >
                       <div className="flex items-center justify-between gap-4">
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            Link {index + 1}
-                          </p>
-                          <p className="mt-1 text-sm font-medium text-slate-700">
-                            {link.isYoutube ? 'YouTube Resource' : 'External Resource'}
-                          </p>
+                          <p className="text-sm font-semibold text-slate-900">Link {index + 1}</p>
+                          <p className="mt-1 text-sm font-medium text-slate-700">{link.title}</p>
                           <p className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-400">
-                            {link.path}
+                            {link.subtitle}
                           </p>
                         </div>
                         <FaExternalLinkAlt className="shrink-0 text-slate-400 transition group-hover:text-emerald-600" />
@@ -460,70 +397,9 @@ const SkillGapRoadmapPage = () => {
                     </a>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-500">No URLs were found in the backend response.</p>
+                  <p className="text-sm text-slate-500">No useful learning links were found in the backend response.</p>
                 )}
               </div>
-
-              {skillGapData.learningResources.length > 0 && (
-                <div className="mt-8">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    Structured Learning Resources
-                  </p>
-                  <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                    {skillGapData.learningResources.map((resource) => (
-                      <div
-                        key={resource.id}
-                        className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,_#ffffff_0%,_#f8fafc_100%)] px-5 py-5"
-                      >
-                        <p className="text-lg font-semibold text-slate-900">{resource.title}</p>
-                        {resource.description ? (
-                          <p className="mt-2 text-sm leading-6 text-slate-600">{resource.description}</p>
-                        ) : null}
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {resource.platform ? (
-                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                              {resource.platform}
-                            </span>
-                          ) : null}
-                          {resource.type ? (
-                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                              {resource.type}
-                            </span>
-                          ) : null}
-                        </div>
-                        {resource.url ? (
-                          <a
-                            href={resource.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-emerald-700 underline"
-                          >
-                            Open resource
-                            <FaExternalLinkAlt className="text-xs" />
-                          </a>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
-
-            <section className="mt-8 rounded-[32px] border border-white/70 bg-white/85 p-6 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.35)] backdrop-blur">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
-                  <FaTerminal className="text-xl" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    Raw Backend Data
-                  </p>
-                  <h2 className="mt-1 text-2xl font-semibold text-slate-900">
-                    Complete stored payload
-                  </h2>
-                </div>
-              </div>
-              <div className="mt-6">{renderValue(skillGapData.rawData)}</div>
             </section>
           </>
         ) : null}
