@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  FaChevronDown,
+  FaChevronUp,
   FaBriefcase,
   FaBuilding,
   FaCheckCircle,
@@ -14,8 +16,10 @@ import {
 import BrandLogo from '../components/BrandLogo';
 import { clearSession, getStoredToken } from '../utils/auth';
 import {
+  calculateApplicantSkillMatch,
   createRecruiterJob,
   getJobApplications,
+  mapApplicationFromApi,
   getRecruiterJobs,
   mapJobFromApi,
   toggleRecruiterJobStatus,
@@ -47,6 +51,12 @@ const getStatusClasses = (status) => {
   return 'bg-amber-50 text-amber-700';
 };
 
+const getMatchToneClasses = (percentage) => {
+  if (percentage >= 80) return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+  if (percentage >= 50) return 'bg-amber-50 text-amber-700 border-amber-100';
+  return 'bg-rose-50 text-rose-700 border-rose-100';
+};
+
 const RecruiterDashboard = () => {
   const navigate = useNavigate();
   const [showPostJob, setShowPostJob] = useState(false);
@@ -56,6 +66,7 @@ const RecruiterDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [updatingJobId, setUpdatingJobId] = useState(null);
+  const [expandedMatchJobId, setExpandedMatchJobId] = useState(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [formData, setFormData] = useState(createInitialFormData);
@@ -96,33 +107,58 @@ const RecruiterDashboard = () => {
           try {
             const applicationsResponse = await withAuth((token) => getJobApplications(token, job.id));
             if (!applicationsResponse) {
-              return { jobId: job.id, applicants: Number(job.applicants || 0) };
+              return { jobId: job.id, applicants: Number(job.applicants || 0), topMatches: [] };
             }
 
             const applicationsData = await parseResponseBody(applicationsResponse);
             if (!applicationsResponse.ok) {
-              return { jobId: job.id, applicants: Number(job.applicants || 0) };
+              return { jobId: job.id, applicants: Number(job.applicants || 0), topMatches: [] };
             }
 
             const applications = Array.isArray(applicationsData)
               ? applicationsData
               : applicationsData.applications ?? [];
 
-            return { jobId: job.id, applicants: applications.length };
+            const topMatches = applications
+              .map(mapApplicationFromApi)
+              .map((application) => {
+                const skillMatch = calculateApplicantSkillMatch(
+                  job.requiredSkills,
+                  application.skills
+                );
+
+                return {
+                  id: application.id,
+                  name: application.candidateName,
+                  email: application.email,
+                  percentage: skillMatch.percentage,
+                  matchedSkills: skillMatch.matchedSkills.length,
+                  totalRequiredSkills: job.requiredSkills.length,
+                };
+              })
+              .sort((firstApplicant, secondApplicant) => {
+                if (secondApplicant.percentage !== firstApplicant.percentage) {
+                  return secondApplicant.percentage - firstApplicant.percentage;
+                }
+
+                return firstApplicant.name.localeCompare(secondApplicant.name);
+              })
+              .slice(0, 4);
+
+            return { jobId: job.id, applicants: applications.length, topMatches };
           } catch {
-            return { jobId: job.id, applicants: Number(job.applicants || 0) };
+            return { jobId: job.id, applicants: Number(job.applicants || 0), topMatches: [] };
           }
         })
       );
 
-      const applicantsByJobId = Object.fromEntries(
-        jobCounts.map((item) => [item.jobId, item.applicants])
-      );
+      const applicantsByJobId = Object.fromEntries(jobCounts.map((item) => [item.jobId, item]));
 
       setJobs(
         mappedJobs.map((job) => ({
           ...job,
-          applicants: applicantsByJobId[job.id] ?? Number(job.applicants || 0),
+          applicants: applicantsByJobId[job.id]?.applicants ?? Number(job.applicants || 0),
+          topMatches: applicantsByJobId[job.id]?.topMatches ?? [],
         }))
       );
     } catch (loadError) {
@@ -224,6 +260,10 @@ const RecruiterDashboard = () => {
     } finally {
       setUpdatingJobId(null);
     }
+  };
+
+  const handleToggleSkillMatches = (jobId) => {
+    setExpandedMatchJobId((currentJobId) => (currentJobId === jobId ? null : jobId));
   };
 
   return (
@@ -415,6 +455,13 @@ const RecruiterDashboard = () => {
 
                   <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-200 pt-5">
                     <button
+                      onClick={() => handleToggleSkillMatches(job.id)}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                    >
+                      {expandedMatchJobId === job.id ? <FaChevronUp /> : <FaChevronDown />}
+                      Skill Match
+                    </button>
+                    <button
                       onClick={() =>
                         navigate(`/recruiter/jobs/${job.id}/applicants`, {
                           state: {
@@ -436,6 +483,55 @@ const RecruiterDashboard = () => {
                       Set {job.status.toUpperCase() === 'ACTIVE' ? 'Inactive' : 'Active'}
                     </button>
                   </div>
+
+                  {expandedMatchJobId === job.id && (
+                    <section className="mt-5 rounded-[24px] border border-slate-200 bg-white p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            Skill Match Snapshot
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-slate-700">
+                            Applicants ranked by resume skills vs role requirements
+                          </p>
+                        </div>
+                        <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                          {job.topMatches?.length || 0} shown
+                        </div>
+                      </div>
+
+                      {job.topMatches?.length ? (
+                        <div className="mt-4 space-y-3">
+                          {job.topMatches.map((applicant) => (
+                            <div
+                              key={applicant.id}
+                              className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-slate-900">
+                                  {applicant.name}
+                                </p>
+                                <p className="truncate text-xs text-slate-500">{applicant.email}</p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {applicant.matchedSkills}/{applicant.totalRequiredSkills} required
+                                  skills matched
+                                </p>
+                              </div>
+                              <div
+                                className={`w-fit rounded-full border px-3 py-1.5 text-sm font-semibold ${getMatchToneClasses(applicant.percentage)}`}
+                              >
+                                {applicant.percentage}% match
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                          Applicants aate hi yahan unka skill match percentage dikh jayega.
+                        </div>
+                      )}
+                    </section>
+                  )}
                 </article>
               ))}
             </div>

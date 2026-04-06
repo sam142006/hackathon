@@ -15,6 +15,71 @@ const normalizeSkills = (skills) => {
   return [];
 };
 
+const normalizeSkillToken = (skill) =>
+  String(skill || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9+#.\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const getUniqueNormalizedSkills = (skills) => {
+  const tokens = normalizeSkills(skills)
+    .map((skill) => normalizeSkillToken(skill))
+    .filter(Boolean);
+
+  return [...new Set(tokens)];
+};
+
+const collectApplicationSkills = (application) => {
+  const candidate = application?.candidate ?? {};
+  const resume = candidate?.resume ?? application?.resume ?? {};
+  const resumeAnalysis = application?.resumeAnalysis ?? candidate?.resumeAnalysis ?? resume?.analysis ?? {};
+
+  return normalizeSkills([
+    ...(Array.isArray(application?.skills) ? application.skills : []),
+    ...(Array.isArray(application?.candidateSkills) ? application.candidateSkills : []),
+    ...(Array.isArray(candidate?.skills) ? candidate.skills : []),
+    ...(Array.isArray(application?.resumeSkills) ? application.resumeSkills : []),
+    ...(Array.isArray(resume?.skills) ? resume.skills : []),
+    ...(Array.isArray(application?.extractedSkills) ? application.extractedSkills : []),
+    ...(Array.isArray(candidate?.extractedSkills) ? candidate.extractedSkills : []),
+    ...(Array.isArray(resumeAnalysis?.extractedSkills) ? resumeAnalysis.extractedSkills : []),
+    ...(Array.isArray(resumeAnalysis?.skills) ? resumeAnalysis.skills : []),
+  ]);
+};
+
+export const calculateApplicantSkillMatch = (requiredSkills = [], candidateSkills = []) => {
+  const normalizedRequiredSkills = getUniqueNormalizedSkills(requiredSkills);
+  const normalizedCandidateSkills = getUniqueNormalizedSkills(candidateSkills);
+
+  if (normalizedRequiredSkills.length === 0) {
+    return {
+      percentage: 0,
+      matchedSkills: [],
+      missingSkills: [],
+    };
+  }
+
+  const matchedSkills = normalizedRequiredSkills.filter((requiredSkill) =>
+    normalizedCandidateSkills.some(
+      (candidateSkill) =>
+        candidateSkill === requiredSkill ||
+        candidateSkill.includes(requiredSkill) ||
+        requiredSkill.includes(candidateSkill)
+    )
+  );
+
+  const missingSkills = normalizedRequiredSkills.filter(
+    (requiredSkill) => !matchedSkills.includes(requiredSkill)
+  );
+
+  return {
+    percentage: Math.round((matchedSkills.length / normalizedRequiredSkills.length) * 100),
+    matchedSkills,
+    missingSkills,
+  };
+};
+
 export const mapJobFromApi = (job) => ({
   id: job.id ?? job.jobId ?? crypto.randomUUID(),
   chatRoomId:
@@ -84,7 +149,7 @@ export const mapApplicationFromApi = (application) => ({
     application.candidate?.resumeId ??
     application.candidate?.resume?.id ??
     null,
-  skills: normalizeSkills(application.skills ?? application.candidateSkills ?? application.candidate?.skills),
+  skills: collectApplicationSkills(application),
   coverLetter: application.coverLetter ?? application.message ?? 'No cover letter provided.',
   status: application.status ?? 'PENDING',
   appliedDate: application.appliedDate ?? application.createdAt ?? '',
